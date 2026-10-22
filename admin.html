@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Administrativo | Lua Cheia</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gold: { 400: '#f1c40f', 500: '#f39c12', 600: '#d35400' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+
+<body class="min-h-screen flex flex-col md:flex-row antialiased overflow-x-hidden">
+
+    <!-- OVERLAY PARA MOBILE -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 z-30 hidden md:hidden" onclick="toggleMobileSidebar()"></div>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar"
+        class="fixed md:static inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 transform -translate-x-full md:translate-x-0">
+        <div class="p-6 border-b border-slate-800 flex items-center gap-3">
+            <div
+                class="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 font-bold text-xl shadow-lg">
+                🌙
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide gold-gradient-text">Lua Cheia</h1>
+                <p id="adminInfoTag" class="text-xs text-amber-400 font-medium">Admin: Carregando...</p>
+            </div>
+        </div>
+
+        <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard"
+                class="nav-btn active w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-chart-pie w-5 text-center"></i> <span>Dashboard</span>
+            </button>
+            <button onclick="switchTab('catalogo')" id="nav-catalogo"
+                class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-store w-5 text-center"></i> <span>Cardápio & Categorias</span>
+            </button>
+            <button onclick="switchTab('relatorios')" id="nav-relatorios"
+                class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-file-shield w-5 text-center"></i> <span>Relatórios de Ação</span>
+            </button>
+            <button onclick="switchTab('configuracoes')" id="nav-configuracoes"
+                class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-gears w-5 text-center"></i> <span>Configurações API</span>
+            </button>
+        </nav>
+    </aside>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div class="flex-1 flex flex-col min-w-0">
+        <header
+            class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between gap-4 sticky top-0 z-20">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleMobileSidebar()"
+                    class="md:hidden p-2 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800">
+                    <i class="fa-solid fa-bars text-lg"></i>
+                </button>
+                <h2 id="pageTitle" class="text-base md:text-lg font-semibold text-slate-100">Visão Geral</h2>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="apiStatusBadge"
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                    <span id="apiStatusDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    <span id="apiStatusText">A verificar banco...</span>
+                </div>
+                <button onclick="carregarDadosDoBanco(true)" title="Sincronizar"
+                    class="p-2 text-slate-400 hover:text-amber-400 bg-slate-800 rounded-xl border border-slate-700">
+                    <i class="fa-solid fa-rotate text-sm"></i>
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto space-y-6">
+
+            <!-- DASHBOARD -->
+            <section id="section-dashboard" class="space-y-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                        <p class="text-xs font-medium text-slate-400 uppercase">Total de Produtos</p>
+                        <h3 id="dashTotalProdutos" class="text-2xl font-bold text-slate-100 mt-2">0</h3>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                        <p class="text-xs font-medium text-slate-400 uppercase">Estoque Baixo (≤ 3 un)</p>
+                        <h3 id="dashStockBaixo" class="text-2xl font-bold text-amber-400 mt-2">0</h3>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                        <p class="text-xs font-medium text-slate-400 uppercase">Categorias</p>
+                        <h3 id="dashTotalCategorias" class="text-2xl font-bold text-emerald-400 mt-2">0</h3>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                        <p class="text-xs font-medium text-slate-400 uppercase">Ações Registradas (Logs)</p>
+                        <h3 id="dashTotalLogs" class="text-2xl font-bold text-amber-300 mt-2">0</h3>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CATÁLOGO UNIFICADO -->
+            <section id="section-catalogo" class="space-y-6 hidden">
+                <div class="flex border-b border-slate-800 gap-4">
+                    <button onclick="mudarSubAbaCatalogo('produtos')" id="subnav-produtos"
+                        class="pb-3 text-sm font-semibold text-amber-400 border-b-2 border-amber-500 transition">Gerenciar
+                        Produtos</button>
+                    <button onclick="mudarSubAbaCatalogo('categorias')" id="subnav-categorias"
+                        class="pb-3 text-sm font-semibold text-slate-400 hover:text-slate-200 transition">Gerenciar
+                        Categorias</button>
+                </div>
+
+                <!-- SUB-SEÇÃO PRODUTOS -->
+                <div id="subsect-produtos" class="space-y-4">
+                    <div
+                        class="flex justify-between items-center bg-slate-900 p-4 border border-slate-800 rounded-2xl">
+                        <input type="text" id="inputSearchProduto" oninput="filtrarProdutos()"
+                            placeholder="Pesquisar produto..."
+                            class="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-amber-500 w-64">
+                        <button onclick="abrirModalProduto()"
+                            class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-xl text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> Novo Produto
+                        </button>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                        <table class="w-full text-left text-sm text-slate-300">
+                            <thead
+                                class="bg-slate-800/80 text-xs uppercase text-slate-400 border-b border-slate-800">
+                                <tr>
+                                    <th class="p-4">Produto</th>
+                                    <th class="p-4">Categoria</th>
+                                    <th class="p-4">Preço</th>
+                                    <th class="p-4">Estoque</th>
+                                    <th class="p-4 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableProdutosBody" class="divide-y divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SUB-SEÇÃO CATEGORIAS -->
+                <div id="subsect-categorias" class="space-y-4 hidden">
+                    <div
+                        class="flex justify-between items-center bg-slate-900 p-4 border border-slate-800 rounded-2xl">
+                        <h3 class="font-bold text-slate-100">Categorias do Cardápio</h3>
+                        <button onclick="abrirModalCategoria()"
+                            class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm">Nova
+                            Categoria</button>
+                    </div>
+                    <div id="gridCategorias" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+                </div>
+            </section>
+
+            <!-- RELATÓRIOS -->
+            <section id="section-relatorios" class="space-y-6 hidden">
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-slate-100 text-base">Relatório de Atividades dos Administradores</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Registo imutável de inserções, atualizações e exclusões no sistema.</p>
+                    </div>
+                    <button onclick="limparRelatorios()"
+                        class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-semibold transition">Limpar Registos</button>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <table class="w-full text-left text-sm text-slate-300">
+                        <thead class="bg-slate-800/80 text-xs uppercase text-slate-400 border-b border-slate-800">
+                            <tr>
+                                <th class="p-4">ID Admin / Nome</th>
+                                <th class="p-4">Ação</th>
+                                <th class="p-4">Detalhes</th>
+                                <th class="p-4 text-right">Data / Hora</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableRelatoriosBody" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- CONFIGURAÇÕES -->
+            <section id="section-configuracoes" class="space-y-6 hidden">
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-xl space-y-4">
+                    <h3 class="font-bold text-slate-100">Identificação do Administrador Atual</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">ID do Admin</label>
+                            <input type="text" id="inputAdminId"
+                                class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200 font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Nome do Administrador</label>
+                            <input type="text" id="inputAdminNome"
+                                class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
+                        </div>
+                    </div>
+                    <button onclick="salvarPerfilAdmin()"
+                        class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm">Salvar Identidade</button>
+
+                    <hr class="border-slate-800 my-4">
+
+                    <h3 class="font-bold text-slate-100">Endereço da API do Banco (Django)</h3>
+                    <input type="url" id="inputApiUrlConfig"
+                        class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm font-mono text-slate-100">
+                    <button onclick="salvarNovaApiUrl()"
+                        class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm">Atualizar Conexão</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL PRODUTO -->
+    <div id="modalProduto" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4">
+            <h3 id="modalProdutoTitulo" class="font-bold text-slate-100 text-base">Novo Produto</h3>
+            <form id="formProduto" onsubmit="salvarProduto(event)" class="space-y-3">
+                <input type="hidden" id="prodId">
+                <input type="text" id="prodNome" required placeholder="Nome do Produto"
+                    class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="number" step="0.01" id="prodPreco" required placeholder="Preço (R$)"
+                        class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
+                    <input type="number" id="prodEstoque" required min="0" value="10" placeholder="Estoque"
+                        class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
+                </div>
+                <select id="prodCategoria" required
+                    class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200"></select>
+                <textarea id="prodDescricao" placeholder="Descrição..."
+                    class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200"></textarea>
+
+                <!-- IMAGEM HÍBRIDA: URL OU ARQUIVO -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">URL da Imagem</label>
+                        <input type="url" id="prodImagemUrl" placeholder="https://..."
+                            class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Ou Upload de Arquivo</label>
+                        <input type="file" id="prodImagemFile" accept="image/png, image/jpeg, image/jpg, image/webp"
+                            class="w-full text-xs text-slate-400 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:font-semibold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-600 bg-slate-800 border border-slate-700 rounded-xl">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="fecharModalProduto()"
+                        class="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm">Cancelar</button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm">Salvar no Banco</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL CATEGORIA -->
+    <div id="modalCategoria" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 space-y-4">
+            <h3 id="modalCategoriaTitulo" class="font-bold text-slate-100">Nova Categoria</h3>
+            <form onsubmit="salvarCategoria(event)" class="space-y-3">
+                <input type="hidden" id="catId">
+                <input type="text" id="catNome" required placeholder="Nome da Categoria"
+                    class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="fecharModalCategoria()"
+                        class="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm">Cancelar</button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm">Salvar Categoria</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+    <script src="admin.js"></script>
+</body>
+
+</html>
