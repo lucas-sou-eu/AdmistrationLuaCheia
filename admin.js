@@ -1,35 +1,335 @@
-const DEFAULT_API_URL = "https://suse-apr-curtis-pieces.trycloudflare.com/api";
+const DEFAULT_API_URL = "https://ports-phoenix-sacramento-subscribe.trycloudflare.com/api";
 let API_URL = localStorage.getItem('LUA_CHEIA_API_URL') || DEFAULT_API_URL;
 
 let produtos = [];
 let categorias = [];
 let relatorios = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMIN_LOGS')) || [];
 
-// Identidade do Administrador
-let adminId = localStorage.getItem('LUA_CHEIA_ADMIN_ID') || "ADM-001";
-let adminNome = localStorage.getItem('LUA_CHEIA_ADMIN_NOME') || "Mestre Lucas";
+// Gestão de Vendas
+let pedidosPendentes = JSON.parse(localStorage.getItem('LUA_CHEIA_PEDIDOS_PENDENTES')) || [];
+let vendasConfirmadas = JSON.parse(localStorage.getItem('LUA_CHEIA_VENDAS_CONFIRMADAS')) || [];
+let vendasEntregues = JSON.parse(localStorage.getItem('LUA_CHEIA_VENDAS_ENTREGUES')) || [];
 
-// Preservação do estado da navegação
+// Modo Teste e Histórico
+let modoTesteAtivo = localStorage.getItem('LUA_CHEIA_MODO_TESTE') === 'true';
+
+// Lista de Administradores
+let listaAdmins = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || [
+    { id: "SUPER-ADM", usuario: "admin", senha: "admin", isSuper: true }
+];
+
+let adminLogado = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMIN_LOGADO')) || null;
+
 let abaAtiva = localStorage.getItem('LUA_CHEIA_ABA_ATIVA') || 'dashboard';
 let subAbaAtiva = localStorage.getItem('LUA_CHEIA_SUB_ABA_ATIVA') || 'produtos';
+let subAbaVendasAtiva = localStorage.getItem('LUA_CHEIA_SUB_ABA_VENDAS') || 'pendentes';
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('inputApiUrlConfig').value = API_URL;
-    document.getElementById('inputAdminId').value = adminId;
-    document.getElementById('inputAdminNome').value = adminNome;
-    document.getElementById('adminInfoTag').textContent = `ID: ${adminId} | ${adminNome}`;
+    const inputApi = document.getElementById('inputApiUrlConfig');
+    if (inputApi) inputApi.value = API_URL;
+
+    // Configura o estado visual do botão do Modo Teste
+    const toggleTeste = document.getElementById('toggleModoTeste');
+    if (toggleTeste) toggleTeste.checked = modoTesteAtivo;
+
+    // Executa a limpeza automática de histórico com mais de 2 dias
+    limparHistoricoAntigoAutomatico();
 
     switchTab(abaAtiva, false);
     mudarSubAbaCatalogo(subAbaAtiva, false);
+    mudarSubAbaVendas(subAbaVendasAtiva, false);
 
-    carregarDadosDoBanco();
+    if (adminLogado && adminLogado.usuario) {
+        configurarInterfacePorPerfil();
+        carregarDadosDoBanco();
+        const modalLogin = document.getElementById('loginModal');
+        if (modalLogin) modalLogin.classList.add('hidden');
+    } else {
+        abrirModalLogin();
+    }
+
+    const formProdutoEl = document.getElementById('formProduto');
+    if (formProdutoEl) {
+        formProdutoEl.addEventListener('submit', function (e) {
+            e.preventDefault();
+            salvarProduto(e);
+        });
+    }
+
+    const modaisCategoriaForms = document.querySelectorAll('#modalCategoria form');
+    modaisCategoriaForms.forEach(form => {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            salvarCategoria(e);
+        });
+    });
+
+    setInterval(() => {
+        verificarNovosPedidosBackground();
+    }, 3000);
 });
 
+function verificarNovosPedidosBackground() {
+    const pedidosSalvos = JSON.parse(localStorage.getItem('LUA_CHEIA_PEDIDOS_PENDENTES')) || [];
+    
+    // Compara se o conteúdo real mudou para evitar sobrescrever a tela durante aprovações
+    if (JSON.stringify(pedidosSalvos) !== JSON.stringify(pedidosPendentes)) {
+        pedidosPendentes = pedidosSalvos;
+        renderizarGestaoVendas();
+    }
+}
+
+// MODO TESTE & LIMPEZA AUTOMÁTICA
+function alternarModoTeste(checkbox) {
+    modoTesteAtivo = checkbox.checked;
+    localStorage.setItem('LUA_CHEIA_MODO_TESTE', modoTesteAtivo);
+    if (modoTesteAtivo) {
+        showToast("Modo Teste ATIVADO: O histórico de entregues não será alimentado.", "info");
+    } else {
+        showToast("Modo Teste DESATIVADO: O histórico voltou ao normal.", "success");
+    }
+}
+
+function limparHistoricoAntigoAutomatico() {
+    let entregues = JSON.parse(localStorage.getItem('LUA_CHEIA_VENDAS_ENTREGUES')) || [];
+    if (entregues.length === 0) return;
+
+    const agora = Date.now();
+    const doisDiasEmMs = 2 * 24 * 60 * 60 * 1000; // 48 horas
+
+    const filtrados = entregues.filter(item => {
+        const timestampPedido = item.timestamp || (typeof item.id === 'number' ? item.id : parseInt(item.id)) || agora;
+        return (agora - timestampPedido) < doisDiasEmMs;
+    });
+
+    if (filtrados.length !== entregues.length) {
+        vendasEntregues = filtrados;
+        localStorage.setItem('LUA_CHEIA_VENDAS_ENTREGUES', JSON.stringify(vendasEntregues));
+    }
+}
+
+// VERIFICAÇÃO DE FORÇA DE SENHA
+function verificarForcaSenha(senha, elMeterId, elTxtId) {
+    const meter = document.getElementById(elMeterId);
+    const txt = document.getElementById(elTxtId);
+    if (!meter || !txt) return;
+
+    let pontos = 0;
+    if (senha.length >= 6) pontos++;
+    if (senha.length >= 10) pontos++;
+    if (/[A-Z]/.test(senha)) pontos++;
+    if (/[0-9]/.test(senha)) pontos++;
+    if (/[^A-Za-z0-9]/.test(senha)) pontos++;
+
+    if (senha.length === 0) {
+        meter.style.width = '0%';
+        meter.className = 'h-full bg-slate-700 transition-all duration-300';
+        txt.textContent = 'Digite uma senha com letras, números e símbolos.';
+        txt.className = 'text-[10px] text-slate-500';
+    } else if (pontos <= 2) {
+        meter.style.width = '33%';
+        meter.className = 'h-full bg-rose-500 transition-all duration-300';
+        txt.textContent = 'Senha Fraca (adicione mais números/símbolos)';
+        txt.className = 'text-[10px] text-rose-400 font-medium';
+    } else if (pontos <= 4) {
+        meter.style.width = '66%';
+        meter.className = 'h-full bg-amber-500 transition-all duration-300';
+        txt.textContent = 'Senha Média';
+        txt.className = 'text-[10px] text-amber-400 font-medium';
+    } else {
+        meter.style.width = '100%';
+        meter.className = 'h-full bg-emerald-500 transition-all duration-300';
+        txt.textContent = 'Senha Forte ✓';
+        txt.className = 'text-[10px] text-emerald-400 font-bold';
+    }
+}
+
+// LOGIN
+function abrirModalLogin() {
+    const modal = document.getElementById('loginModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function realizarLogin(e) {
+    if (e) e.preventDefault();
+    const u = document.getElementById('loginUsuario').value.trim();
+    const s = document.getElementById('loginSenha').value.trim();
+
+    const adminEncontrado = listaAdmins.find(a => a.usuario === u && a.senha === s);
+
+    if (adminEncontrado) {
+        adminLogado = adminEncontrado;
+        localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
+
+        const modalLogin = document.getElementById('loginModal');
+        if (modalLogin) modalLogin.classList.add('hidden');
+
+        configurarInterfacePorPerfil();
+        showToast(`Bem-vindo, @${adminLogado.usuario}!`, "success");
+        carregarDadosDoBanco();
+    } else {
+        showToast("Usuário ou senha incorretos!", "error");
+    }
+    return false;
+}
+
+function configurarInterfacePorPerfil() {
+    if (!adminLogado) return;
+
+    const infoTag = document.getElementById('adminInfoTag');
+    if (infoTag) infoTag.textContent = `${adminLogado.isSuper ? '👑 Super Admin' : 'Admin'}: @${adminLogado.usuario}`;
+
+    const boxSuper = document.getElementById('boxSuperAdminConfig');
+    const boxNotice = document.getElementById('boxAdminComumNotice');
+
+    if (adminLogado.isSuper) {
+        if (boxSuper) boxSuper.classList.remove('hidden');
+        if (boxNotice) boxNotice.classList.add('hidden');
+        const inputSuperUser = document.getElementById('inputSuperNovoUsuario');
+        if (inputSuperUser) inputSuperUser.value = adminLogado.usuario;
+        renderizarListaAdmins();
+    } else {
+        if (boxSuper) boxSuper.classList.add('hidden');
+        if (boxNotice) boxNotice.classList.remove('hidden');
+    }
+}
+
+function fazerLogout() {
+    localStorage.removeItem('LUA_CHEIA_ADMIN_LOGADO');
+    adminLogado = null;
+    abrirModalLogin();
+}
+
+function alterarCredenciaisSuperAdmin(e) {
+    if (e) e.preventDefault();
+    if (!adminLogado || !adminLogado.isSuper) return;
+
+    const novoUser = document.getElementById('inputSuperNovoUsuario').value.trim();
+    const novaPass = document.getElementById('inputSuperNovaSenha').value.trim();
+
+    if (!novoUser || !novaPass) {
+        showToast("Preencha o novo usuário e a nova senha.", "error");
+        return;
+    }
+
+    const idx = listaAdmins.findIndex(a => a.isSuper);
+    if (idx !== -1) {
+        listaAdmins[idx].usuario = novoUser;
+        listaAdmins[idx].senha = novaPass;
+    }
+
+    adminLogado.usuario = novoUser;
+    adminLogado.senha = novaPass;
+
+    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(listaAdmins));
+    localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
+
+    document.getElementById('inputSuperNovaSenha').value = '';
+    document.getElementById('superSenhaMeter').style.width = '0%';
+    document.getElementById('superSenhaTxt').textContent = 'Qualidade da senha';
+
+    configurarInterfacePorPerfil();
+    registrarRelatorio('ALTERAR CREDENCIAIS', `Super Admin atualizou usuário para @${novoUser}`);
+    showToast("Credenciais do Super Admin alteradas com sucesso!", "success");
+    return false;
+}
+
+function toggleListaAdmins() {
+    const container = document.getElementById('containerListaAdmins');
+    const icon = document.getElementById('iconToggleAdmins');
+    if (!container || !icon) return;
+    container.classList.toggle('hidden');
+    icon.className = container.classList.contains('hidden') ? "fa-solid fa-chevron-down" : "fa-solid fa-chevron-up";
+}
+
+function renderizarListaAdmins() {
+    const body = document.getElementById('listaAdminsBody');
+    if (!body) return;
+
+    body.innerHTML = listaAdmins.map(a => `
+        <div class="py-2.5 flex items-center justify-between text-xs">
+            <div>
+                <span class="font-mono text-amber-400 font-bold">${a.id}</span>
+                <span class="text-slate-200 font-semibold ml-2">@${a.usuario}</span>
+                ${a.isSuper ? '<span class="ml-2 px-2 py-0.5 bg-amber-500/20 text-amber-300 font-bold rounded text-[10px]">Super Admin</span>' : ''}
+            </div>
+            ${!a.isSuper ? `
+                <button onclick="excluirAdmin('${a.id}')" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            ` : ''}
+        </div>
+    `).join('');
+}
+
+function abrirModalAdmin() {
+    if (!adminLogado || !adminLogado.isSuper) return;
+
+    document.getElementById('novoAdminUsuarioInput').value = '';
+    document.getElementById('novoAdminSenhaInput').value = '';
+    document.getElementById('confirmacaoSenhaSuperAdmin').value = '';
+    document.getElementById('novoSenhaMeter').style.width = '0%';
+    document.getElementById('novoSenhaTxt').textContent = 'Qualidade da senha';
+
+    document.getElementById('modalAdmin').classList.remove('hidden');
+}
+
+function fecharModalAdmin() {
+    document.getElementById('modalAdmin').classList.add('hidden');
+}
+
+function salvarNovoAdmin(e) {
+    if (e) e.preventDefault();
+    if (!adminLogado || !adminLogado.isSuper) return;
+
+    const usuario = document.getElementById('novoAdminUsuarioInput').value.trim();
+    const senha = document.getElementById('novoAdminSenhaInput').value.trim();
+    const confirmacaoSuper = document.getElementById('confirmacaoSenhaSuperAdmin').value.trim();
+
+    if (confirmacaoSuper !== adminLogado.senha) {
+        showToast("Senha do Super Admin incorreta!", "error");
+        return;
+    }
+
+    if (listaAdmins.some(a => a.usuario === usuario)) {
+        showToast("Este usuário de login já existe!", "error");
+        return;
+    }
+
+    const novoId = `ADM-00${listaAdmins.length}`;
+    listaAdmins.push({ id: novoId, usuario, senha, isSuper: false });
+
+    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(listaAdmins));
+
+    renderizarListaAdmins();
+    fecharModalAdmin();
+    registrarRelatorio('CRIAR ADMIN', `Novo Admin cadastrado: @${usuario}`);
+    showToast("Novo Administrador cadastrado com sucesso!", "success");
+    return false;
+}
+
+function excluirAdmin(id) {
+    if (!adminLogado || !adminLogado.isSuper) return;
+
+    const adminParaExcluir = listaAdmins.find(a => a.id === id);
+    if (adminParaExcluir && adminParaExcluir.isSuper) return;
+
+    if (!confirm(`Deseja remover o administrador "@${adminParaExcluir ? adminParaExcluir.usuario : id}"?`)) return;
+
+    listaAdmins = listaAdmins.filter(a => a.id !== id);
+    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(listaAdmins));
+
+    renderizarListaAdmins();
+    registrarRelatorio('EXCLUIR ADMIN', `Admin removido ID: ${id}`);
+    showToast("Administrador removido!", "success");
+}
+
 function registrarRelatorio(acao, detalhes) {
+    if (!adminLogado) return;
     const novoLog = {
         id: Date.now(),
-        adminId: adminId,
-        adminNome: adminNome,
+        adminId: adminLogado.id,
+        adminNome: `@${adminLogado.usuario}`,
         acao: acao,
         detalhes: detalhes,
         data: new Date().toLocaleString('pt-BR')
@@ -46,29 +346,33 @@ function switchTab(tab, salvarEstado = true) {
         localStorage.setItem('LUA_CHEIA_ABA_ATIVA', tab);
     }
 
-    const sections = ['dashboard', 'catalogo', 'relatorios', 'configuracoes'];
+    const sections = ['dashboard', 'catalogo', 'vendas', 'relatorios', 'configuracoes'];
 
     sections.forEach(s => {
         const secEl = document.getElementById(`section-${s}`);
         const navBtn = document.getElementById(`nav-${s}`);
 
-        if (s === tab) {
-            secEl.classList.remove('hidden');
-            if (navBtn) navBtn.classList.add('active');
-        } else {
-            secEl.classList.add('hidden');
-            if (navBtn) navBtn.classList.remove('active');
+        if (secEl) {
+            if (s === tab) {
+                secEl.classList.remove('hidden');
+                if (navBtn) navBtn.classList.add('active');
+            } else {
+                secEl.classList.add('hidden');
+                if (navBtn) navBtn.classList.remove('active');
+            }
         }
     });
 
     const titulos = {
         dashboard: 'Visão Geral & Dashboard',
         catalogo: 'Gestão de Cardápio & Categorias',
-        relatorios: 'Relatórios de Atividades dos Administradores',
-        configuracoes: 'Configurações do Sistema'
+        vendas: 'Gestão de Vendas & Pedidos',
+        relatorios: 'Relatórios de Atividades',
+        configuracoes: 'Configurações'
     };
 
-    document.getElementById('pageTitle').textContent = titulos[tab] || 'Painel';
+    const titleEl = document.getElementById('pageTitle');
+    if (titleEl) titleEl.textContent = titulos[tab] || 'Painel';
 
     const sidebar = document.getElementById('sidebar');
     if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
@@ -83,11 +387,216 @@ function mudarSubAbaCatalogo(sub, salvarEstado = true) {
     }
 
     const isProd = sub === 'produtos';
-    document.getElementById('subsect-produtos').classList.toggle('hidden', !isProd);
-    document.getElementById('subsect-categorias').classList.toggle('hidden', isProd);
+    const subProd = document.getElementById('subsect-produtos');
+    const subCat = document.getElementById('subsect-categorias');
+    if (subProd) subProd.classList.toggle('hidden', !isProd);
+    if (subCat) subCat.classList.toggle('hidden', isProd);
 
-    document.getElementById('subnav-produtos').className = isProd ? "pb-3 text-sm font-semibold text-amber-400 border-b-2 border-amber-500 transition" : "pb-3 text-sm font-semibold text-slate-400 hover:text-slate-200 transition";
-    document.getElementById('subnav-categorias').className = !isProd ? "pb-3 text-sm font-semibold text-amber-400 border-b-2 border-amber-500 transition" : "pb-3 text-sm font-semibold text-slate-400 hover:text-slate-200 transition";
+    const navProd = document.getElementById('subnav-produtos');
+    const navCat = document.getElementById('subnav-categorias');
+    if (navProd) navProd.className = isProd ? "pb-3 text-sm font-semibold text-amber-400 border-b-2 border-amber-500 transition" : "pb-3 text-sm font-semibold text-slate-400 hover:text-slate-200 transition";
+    if (navCat) navCat.className = !isProd ? "pb-3 text-sm font-semibold text-amber-400 border-b-2 border-amber-500 transition" : "pb-3 text-sm font-semibold text-slate-400 hover:text-slate-200 transition";
+}
+
+function mudarSubAbaVendas(sub, salvarEstado = true) {
+    if (salvarEstado) {
+        subAbaVendasAtiva = sub;
+        localStorage.setItem('LUA_CHEIA_SUB_ABA_VENDAS', sub);
+    }
+
+    ['pendentes', 'confirmadas', 'entregues'].forEach(s => {
+        const isTarget = s === sub;
+        const targetEl = document.getElementById(`subsect-vendas-${s}`);
+        const navEl = document.getElementById(`subnav-${s}`);
+        if (targetEl) targetEl.classList.toggle('hidden', !isTarget);
+        if (navEl) {
+            navEl.className = isTarget
+                ? "pb-3 text-sm font-semibold text-amber-400 border-b-2 border-amber-500 transition relative"
+                : "pb-3 text-sm font-semibold text-slate-400 hover:text-slate-200 transition";
+        }
+    });
+}
+
+function renderizarGestaoVendas() {
+    const badgeCount = document.getElementById('badgePendentesCount');
+    if (badgeCount) badgeCount.textContent = pedidosPendentes.length;
+
+    const gridPendentes = document.getElementById('gridPedidosPendentes');
+    if (gridPendentes) {
+        gridPendentes.innerHTML = pedidosPendentes.map(p => `
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">${p.id}</span>
+                        <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${p.id}</h4>
+                        <p class="text-xs text-slate-400">${p.dataHora || ''}</p>
+                    </div>
+                    <span class="font-bold text-amber-400 text-sm">R$ ${parseFloat(p.total).toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div class="flex gap-2 pt-2 border-t border-slate-800">
+                    <button onclick="abrirDetalhesVenda('pendente', '${p.id}')" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold">Ver Itens</button>
+                    <button onclick="confirmarPedidoBanco('${p.id}')" class="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl text-xs font-bold">Aprovar & Descontar</button>
+                    <button onclick="recusarPedido('${p.id}')" class="px-3 py-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-xl text-xs"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>
+        `).join('') || `<p class="text-slate-500 text-xs col-span-2 text-center py-6">Nenhum pedido pendente no momento.</p>`;
+    }
+
+    const gridConfirmadas = document.getElementById('gridVendasConfirmadas');
+    if (gridConfirmadas) {
+        gridConfirmadas.innerHTML = vendasConfirmadas.map(v => `
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">CONFIRMADO</span>
+                        <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${v.id}</h4>
+                        <p class="text-xs text-slate-400">${v.dataHora || ''}</p>
+                    </div>
+                    <span class="font-bold text-amber-400 text-sm">R$ ${parseFloat(v.total).toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div class="flex gap-2 pt-2 border-t border-slate-800">
+                    <button onclick="abrirDetalhesVenda('confirmada', '${v.id}')" class="flex-1 py-2 bg-slate-800 text-slate-200 rounded-xl text-xs font-semibold">Ver Itens</button>
+                    <button onclick="marcarComoEntregue('${v.id}')" class="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold">Marcar como Entregue</button>
+                </div>
+            </div>
+        `).join('') || `<p class="text-slate-500 text-xs col-span-2 text-center py-6">Nenhuma venda confirmada ativa.</p>`;
+    }
+
+    const gridEntregues = document.getElementById('gridVendasEntregues');
+    if (gridEntregues) {
+        gridEntregues.innerHTML = vendasEntregues.map(e => `
+            <div class="bg-slate-900/60 border border-slate-800/60 rounded-2xl p-5 space-y-3">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">ENTREGUE</span>
+                        <h4 class="font-bold text-slate-300 text-sm mt-1">Pedido #${e.id}</h4>
+                        <p class="text-xs text-slate-500">${e.dataHora || ''}</p>
+                    </div>
+                    <span class="font-semibold text-slate-300 text-sm">R$ ${parseFloat(e.total).toFixed(2).replace('.', ',')}</span>
+                </div>
+                <button onclick="abrirDetalhesVenda('entregue', '${e.id}')" class="w-full py-1.5 bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl text-xs">Ver Detalhes</button>
+            </div>
+        `).join('') || `<p class="text-slate-500 text-xs col-span-2 text-center py-6">Nenhum histórico de entrega registrado.</p>`;
+    }
+}
+
+// FUNÇÃO ATUALIZADA: Aprovação direta + Abatimento assíncrono seguro
+async function confirmarPedidoBanco(id) {
+    const idStr = String(id);
+    const index = pedidosPendentes.findIndex(p => String(p.id) === idStr);
+    
+    if (index === -1) {
+        showToast("Pedido não encontrado na lista.", "error");
+        return;
+    }
+
+    if (!confirm(`Aprovar pedido #${id}? Isso irá abater o estoque dos produtos no banco de dados.`)) return;
+
+    // 1. Remove da lista local de pendentes e adiciona às confirmadas IMEDIATAMENTE
+    const [pedidoAprovado] = pedidosPendentes.splice(index, 1);
+    vendasConfirmadas.unshift(pedidoAprovado);
+
+    // 2. Salva no localStorage na hora para impedir que o polling recupere o pedido
+    localStorage.setItem('LUA_CHEIA_PEDIDOS_PENDENTES', JSON.stringify(pedidosPendentes));
+    localStorage.setItem('LUA_CHEIA_VENDAS_CONFIRMADAS', JSON.stringify(vendasConfirmadas));
+
+    // 3. Atualiza a interface instantaneamente na tela
+    renderizarGestaoVendas();
+    showToast(`Pedido #${id} aprovado e movido para Vendas Confirmadas!`, "success");
+
+    // 4. Abate o estoque no servidor em segundo plano sem travar a interface
+    if (Array.isArray(pedidoAprovado.itens)) {
+        for (const item of pedidoAprovado.itens) {
+            try {
+                const prodIdAlvo = item.produtoId || item.id || item.codigo;
+                if (prodIdAlvo) {
+                    const produtoAtual = produtos.find(p => String(p.id) === String(prodIdAlvo));
+                    if (produtoAtual) {
+                        const estoqueAtual = produtoAtual.estoque ?? produtoAtual.quantidade_estoque ?? 10;
+                        const qtdComprada = Number(item.quantidade || item.qtd || 1);
+                        const novoEstoque = Math.max(0, estoqueAtual - qtdComprada);
+
+                        produtoAtual.estoque = novoEstoque;
+
+                        await fetch(`${API_URL}/produtos/${produtoAtual.id}/`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                estoque: novoEstoque,
+                                quantidade_estoque: novoEstoque
+                            })
+                        });
+                    }
+                }
+            } catch (errItem) {
+                console.warn("Aviso ao abater estoque no servidor:", errItem);
+            }
+        }
+    }
+    
+    carregarDadosSilencioso();
+}
+
+function recusarPedido(id) {
+    if (!confirm("Deseja recusar este pedido?")) return;
+    const idStr = String(id);
+    pedidosPendentes = pedidosPendentes.filter(p => String(p.id) !== idStr);
+    localStorage.setItem('LUA_CHEIA_PEDIDOS_PENDENTES', JSON.stringify(pedidosPendentes));
+    renderizarGestaoVendas();
+    showToast("Pedido recusado.", "info");
+}
+
+function marcarComoEntregue(id) {
+    const idStr = String(id);
+    const venda = vendasConfirmadas.find(v => String(v.id) === idStr);
+    if (!venda) return;
+
+    vendasConfirmadas = vendasConfirmadas.filter(v => String(v.id) !== idStr);
+    localStorage.setItem('LUA_CHEIA_VENDAS_CONFIRMADAS', JSON.stringify(vendasConfirmadas));
+
+    if (!modoTesteAtivo) {
+        venda.timestamp = Date.now();
+        vendasEntregues.unshift(venda);
+        localStorage.setItem('LUA_CHEIA_VENDAS_ENTREGUES', JSON.stringify(vendasEntregues));
+        showToast("Venda movida para o histórico de entregues!", "success");
+    } else {
+        showToast("Venda concluída (Modo Teste: ignorada no histórico).", "info");
+    }
+
+    renderizarGestaoVendas();
+}
+
+function abrirDetalhesVenda(tipo, id) {
+    const lista = tipo === 'pendente' ? pedidosPendentes : (tipo === 'confirmada' ? vendasConfirmadas : vendasEntregues);
+    const p = lista.find(item => String(item.id) === String(id));
+    if (!p) return;
+
+    const tituloEl = document.getElementById('modalVendaTitulo');
+    const totalEl = document.getElementById('modalVendaTotal');
+    const conteudo = document.getElementById('modalVendaConteudo');
+    const modal = document.getElementById('modalDetalhesVenda');
+
+    if (tituloEl) tituloEl.textContent = `Detalhes do Pedido #${p.id}`;
+    if (totalEl) totalEl.textContent = `R$ ${parseFloat(p.total).toFixed(2).replace('.', ',')}`;
+
+    if (conteudo) {
+        conteudo.innerHTML = p.itens.map(i => `
+            <div class="flex justify-between items-center py-2 border-b border-slate-800">
+                <div>
+                    <p class="font-bold text-slate-200">${i.nome}</p>
+                    <p class="text-[10px] text-slate-400">Quantidade: ${i.quantidade} un</p>
+                </div>
+                <span class="font-semibold text-amber-400">R$ ${(i.preco * i.quantidade).toFixed(2).replace('.', ',')}</span>
+            </div>
+        `).join('');
+    }
+
+    if (modal) modal.classList.remove('hidden');
+}
+
+function fecharModalDetalhesVenda() {
+    const modal = document.getElementById('modalDetalhesVenda');
+    if (modal) modal.classList.add('hidden');
 }
 
 async function carregarDadosDoBanco(manual = false) {
@@ -105,17 +614,21 @@ async function carregarDadosDoBanco(manual = false) {
         produtos = await resProd.json();
         categorias = await resCat.json();
 
-        badgeDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
-        badgeText.textContent = "Banco Conectado (Django)";
-        badgeText.className = "text-emerald-400 font-semibold";
+        if (badgeDot && badgeText) {
+            badgeDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+            badgeText.textContent = "Banco Conectado";
+            badgeText.className = "text-emerald-400 font-semibold";
+        }
 
         if (manual) showToast("Dados sincronizados com sucesso!", "success");
 
         renderizarTudo();
     } catch (error) {
-        badgeDot.className = "w-2 h-2 rounded-full bg-rose-500";
-        badgeText.textContent = "Erro de Conexão com o Banco";
-        badgeText.className = "text-rose-400 font-medium";
+        if (badgeDot && badgeText) {
+            badgeDot.className = "w-2 h-2 rounded-full bg-rose-500";
+            badgeText.textContent = "Erro de Conexão";
+            badgeText.className = "text-rose-400 font-medium";
+        }
         if (manual) showToast("Não foi possível conectar ao banco.", "error");
     }
 }
@@ -124,43 +637,35 @@ function renderizarTudo() {
     renderizarDashboard();
     renderizarProdutos();
     renderizarCategorias();
+    renderizarGestaoVendas();
     renderizarRelatorios();
     preencherSelectCategorias();
 }
 
 function renderizarDashboard() {
-    document.getElementById('dashTotalProdutos').textContent = produtos.length;
+    const totalProd = document.getElementById('dashTotalProdutos');
+    const stockBaixo = document.getElementById('dashStockBaixo');
+    const totalCat = document.getElementById('dashTotalCategorias');
+    const totalLogs = document.getElementById('dashTotalLogs');
 
-    // Conta produtos onde o estoque (ou quantidade_estoque) é menor ou igual a 3
+    if (totalProd) totalProd.textContent = produtos.length;
+
     const estoqueBaixoCount = produtos.filter(p => {
         const qtd = p.estoque !== undefined ? p.estoque : (p.quantidade_estoque !== undefined ? p.quantidade_estoque : 0);
         return qtd <= 3;
     }).length;
 
-    document.getElementById('dashStockBaixo').textContent = estoqueBaixoCount;
-    document.getElementById('dashTotalCategorias').textContent = categorias.length;
-    document.getElementById('dashTotalLogs').textContent = relatorios.length;
+    if (stockBaixo) stockBaixo.textContent = estoqueBaixoCount;
+    if (totalCat) totalCat.textContent = categorias.length;
+    if (totalLogs) totalLogs.textContent = relatorios.length;
 }
 
 function renderizarProdutos(lista = produtos) {
     const body = document.getElementById('tableProdutosBody');
+    if (!body) return;
+
     body.innerHTML = lista.map(p => {
-        let imagemSrc = 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=100&q=80';
-
-        if (p.imagem) {
-            if (p.imagem.startsWith('http')) {
-                imagemSrc = p.imagem;
-            } else {
-                // Pega a URL base correta (remove o /api do final de forma segura)
-                const baseUrlServer = API_URL.replace(/\/api\/?$/, "");
-                // Garante que p.imagem comece com barra
-                const caminhoImagem = p.imagem.startsWith('/') ? p.imagem : `/${p.imagem}`;
-                imagemSrc = `${baseUrlServer}${caminhoImagem}`;
-            }
-        } else if (p.imagem_url) {
-            imagemSrc = p.imagem_url;
-        }
-
+        const imagemSrc = obterUrlImagemProduto(p);
         const qtdEstoque = p.estoque ?? p.quantidade_estoque ?? 0;
 
         return `
@@ -181,16 +686,48 @@ function renderizarProdutos(lista = produtos) {
             </td>
         </tr>
     `}).join('') || `<tr><td colspan="5" class="p-8 text-center text-slate-500">Nenhum produto encontrado.</td></tr>`;
+
+    const mobileList = document.getElementById('mobileProdutosList');
+    if (mobileList) {
+        mobileList.innerHTML = lista.map(p => `
+            <div class="p-4 flex items-center justify-between gap-3 bg-slate-900/60">
+                <span class="font-bold text-slate-100 text-sm truncate">${p.nome}</span>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <button onclick="editarProduto(${p.id})" class="p-2 bg-slate-800 hover:bg-amber-500/10 text-amber-400 rounded-lg text-xs flex items-center gap-1.5 px-3">
+                        <i class="fa-solid fa-pen-to-square"></i> Editar
+                    </button>
+                    <button onclick="excluirProduto(${p.id})" class="p-2 bg-slate-800 hover:bg-rose-500/10 text-rose-400 rounded-lg text-xs">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('') || `<p class="p-6 text-center text-slate-500 text-xs">Nenhum produto cadastrado.</p>`;
+    }
+}
+
+function obterUrlImagemProduto(p) {
+    if (p.imagem) {
+        if (p.imagem.startsWith('http')) return p.imagem;
+        const baseUrlServer = API_URL.replace(/\/api\/?$/, "");
+        const caminhoImagem = p.imagem.startsWith('/') ? p.imagem : `/${p.imagem}`;
+        return `${baseUrlServer}${caminhoImagem}`;
+    } else if (p.imagem_url) {
+        return p.imagem_url;
+    }
+    return 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=100&q=80';
 }
 
 function filtrarProdutos() {
-    const busca = document.getElementById('inputSearchProduto').value.toLowerCase();
+    const inputSearch = document.getElementById('inputSearchProduto');
+    const busca = inputSearch ? inputSearch.value.toLowerCase() : '';
     const filtrados = produtos.filter(p => p.nome.toLowerCase().includes(busca));
     renderizarProdutos(filtrados);
 }
 
 function renderizarCategorias() {
     const grid = document.getElementById('gridCategorias');
+    if (!grid) return;
+
     grid.innerHTML = categorias.map(c => `
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex justify-between items-center">
             <div class="flex items-center gap-3">
@@ -210,6 +747,8 @@ function renderizarCategorias() {
 
 function renderizarRelatorios() {
     const body = document.getElementById('tableRelatoriosBody');
+    if (!body) return;
+
     body.innerHTML = relatorios.map(r => `
         <tr class="hover:bg-slate-800/40 text-xs">
             <td class="p-4 font-mono text-amber-400">${r.adminId} - ${r.adminNome}</td>
@@ -222,12 +761,42 @@ function renderizarRelatorios() {
 
 function preencherSelectCategorias() {
     const select = document.getElementById('prodCategoria');
+    if (!select) return;
     select.innerHTML = categorias.map(c => `<option value="${c.id}">${c.nome}</option>`).join('') || `<option value="">Selecione uma categoria</option>`;
 }
 
-// SALVAR PRODUTO COM SUPORTE A ARQUIVO OU URL
+function atualizarPreviewPorUrl() {
+    const url = document.getElementById('prodImagemUrl').value.trim();
+    const imgPreview = document.getElementById('prodImgPreview');
+    const previewText = document.getElementById('previewText');
+
+    if (url && imgPreview && previewText) {
+        imgPreview.src = url;
+        previewText.textContent = "Imagem da URL informada.";
+    } else if (imgPreview && previewText) {
+        imgPreview.src = 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=100&q=80';
+        previewText.textContent = "Nenhuma imagem selecionada.";
+    }
+}
+
+function atualizarPreviewPorArquivo(input) {
+    const file = input.files[0];
+    const imgPreview = document.getElementById('prodImgPreview');
+    const previewText = document.getElementById('previewText');
+
+    if (file && imgPreview && previewText) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            imgPreview.src = e.target.result;
+            previewText.textContent = `Arquivo local: ${file.name}`;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
 async function salvarProduto(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
+
     const id = document.getElementById('prodId').value;
     const nome = document.getElementById('prodNome').value;
 
@@ -240,14 +809,10 @@ async function salvarProduto(e) {
     formData.append('disponivel', 'true');
 
     const urlInput = document.getElementById('prodImagemUrl').value.trim();
-    if (urlInput) {
-        formData.append('imagem_url', urlInput);
-    }
+    if (urlInput) formData.append('imagem_url', urlInput);
 
     const arquivoInput = document.getElementById('prodImagemFile');
-    if (arquivoInput.files[0]) {
-        formData.append('imagem', arquivoInput.files[0]);
-    }
+    if (arquivoInput.files[0]) formData.append('imagem', arquivoInput.files[0]);
 
     const url = id ? `${API_URL}/produtos/${id}/` : `${API_URL}/produtos/`;
     const method = id ? 'PATCH' : 'POST';
@@ -260,13 +825,12 @@ async function salvarProduto(e) {
             fecharModalProduto();
             await carregarDadosSilencioso();
         } else {
-            const errJson = await res.json();
-            console.error(errJson);
             showToast("Erro de validação no produto.", "error");
         }
     } catch (err) {
         showToast("Erro de comunicação com o servidor.", "error");
     }
+    return false;
 }
 
 async function excluirProduto(id) {
@@ -285,9 +849,8 @@ async function excluirProduto(id) {
     }
 }
 
-// SALVAR CATEGORIA
 async function salvarCategoria(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const id = document.getElementById('catId').value;
     const nome = document.getElementById('catNome').value;
     const slug = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '-');
@@ -307,6 +870,7 @@ async function salvarCategoria(e) {
     } catch (err) {
         showToast("Erro ao guardar categoria.", "error");
     }
+    return false;
 }
 
 async function excluirCategoria(id) {
@@ -342,15 +906,6 @@ async function carregarDadosSilencioso() {
     }
 }
 
-function salvarPerfilAdmin() {
-    adminId = document.getElementById('inputAdminId').value.trim() || "ADM-001";
-    adminNome = document.getElementById('inputAdminNome').value.trim() || "Mestre Lucas";
-    localStorage.setItem('LUA_CHEIA_ADMIN_ID', adminId);
-    localStorage.setItem('LUA_CHEIA_ADMIN_NOME', adminNome);
-    document.getElementById('adminInfoTag').textContent = `ID: ${adminId} | ${adminNome}`;
-    showToast("Identidade de Administrador atualizada!", "success");
-}
-
 function salvarNovaApiUrl() {
     const val = document.getElementById('inputApiUrlConfig').value.trim();
     if (val) {
@@ -371,10 +926,13 @@ function limparRelatorios() {
 }
 
 function abrirModalProduto() {
-    document.getElementById('formProduto').reset();
+    const form = document.getElementById('formProduto');
+    if (form) form.reset();
     document.getElementById('prodId').value = '';
     document.getElementById('prodImagemUrl').value = '';
     document.getElementById('prodImagemFile').value = '';
+    document.getElementById('prodImgPreview').src = 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=100&q=80';
+    document.getElementById('previewText').textContent = 'Cole uma URL ou selecione um arquivo abaixo.';
     document.getElementById('modalProdutoTitulo').textContent = 'Novo Produto';
     document.getElementById('modalProduto').classList.remove('hidden');
 }
@@ -382,6 +940,7 @@ function abrirModalProduto() {
 function editarProduto(id) {
     const p = produtos.find(item => item.id == id);
     if (!p) return;
+
     document.getElementById('prodId').value = p.id;
     document.getElementById('prodNome').value = p.nome;
     document.getElementById('prodPreco').value = p.preco;
@@ -391,11 +950,18 @@ function editarProduto(id) {
     document.getElementById('prodImagemUrl').value = p.imagem_url || '';
     document.getElementById('prodImagemFile').value = '';
 
+    const imgSrc = obterUrlImagemProduto(p);
+    document.getElementById('prodImgPreview').src = imgSrc;
+    document.getElementById('previewText').textContent = 'Imagem cadastrada do produto.';
+
     document.getElementById('modalProdutoTitulo').textContent = 'Editar Produto';
     document.getElementById('modalProduto').classList.remove('hidden');
 }
 
-function fecharModalProduto() { document.getElementById('modalProduto').classList.add('hidden'); }
+function fecharModalProduto() {
+    const modal = document.getElementById('modalProduto');
+    if (modal) modal.classList.add('hidden');
+}
 
 function abrirModalCategoria() {
     document.getElementById('catNome').value = '';
@@ -411,7 +977,10 @@ function editarCategoria(id, nome) {
     document.getElementById('modalCategoria').classList.remove('hidden');
 }
 
-function fecharModalCategoria() { document.getElementById('modalCategoria').classList.add('hidden'); }
+function fecharModalCategoria() {
+    const modal = document.getElementById('modalCategoria');
+    if (modal) modal.classList.add('hidden');
+}
 
 function toggleMobileSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -422,9 +991,11 @@ function toggleMobileSidebar() {
 
 function showToast(msg, tipo = 'info') {
     const container = document.getElementById('toastContainer');
+    if (!container) return;
+
     const toast = document.createElement('div');
     const cores = { success: 'bg-emerald-950 text-emerald-300', error: 'bg-rose-950 text-rose-300', info: 'bg-slate-900 text-slate-200' };
-    toast.className = `px-4 py-3 rounded-xl border border-slate-700 text-xs font-medium shadow-xl ${cores[tipo]}`;
+    toast.className = `px-4 py-3 rounded-xl border border-slate-700 text-xs font-medium shadow-xl ${cores[tipo] || cores.info}`;
     toast.textContent = msg;
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
