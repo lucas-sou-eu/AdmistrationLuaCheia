@@ -26,38 +26,6 @@
 
 <body class="min-h-screen flex flex-col md:flex-row antialiased overflow-x-hidden bg-slate-950 text-slate-100">
 
-    <!-- MODAL OBRIGATÓRIO DE LOGIN -->
-    <div id="loginModal"
-        class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
-        <div
-            class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 sm:p-8 space-y-6 shadow-2xl text-center">
-            <div class="flex justify-center">
-                <img src="logo.png" alt="Logo Lua Cheia"
-                    class="w-20 h-20 rounded-full border-2 border-amber-500 object-cover shadow-lg">
-            </div>
-            <div>
-                <h2 class="text-xl font-bold tracking-wide gold-gradient-text">Área Administrativa</h2>
-                <p class="text-xs text-slate-400 mt-1">Informe suas credenciais para continuar</p>
-            </div>
-            <form onsubmit="realizarLogin(event)" class="space-y-4 text-left">
-                <div>
-                    <label class="block text-xs font-medium text-slate-400 mb-1">Usuário</label>
-                    <input type="text" id="loginUsuario" required placeholder="Digite seu usuário..."
-                        class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-400 mb-1">Senha</label>
-                    <input type="password" id="loginSenha" required placeholder="••••••••"
-                        class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-500">
-                </div>
-                <button type="submit"
-                    class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-sm shadow-lg transition">
-                    Entrar no Painel
-                </button>
-            </form>
-        </div>
-    </div>
-
     <!-- OVERLAY PARA MOBILE -->
     <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 z-30 hidden md:hidden" onclick="toggleMobileSidebar()">
     </div>
@@ -70,7 +38,7 @@
                 class="w-10 h-10 rounded-full border border-amber-500 object-cover">
             <div>
                 <h1 class="text-lg font-bold tracking-wide gold-gradient-text">Lua Cheia</h1>
-                <p id="adminInfoTag" class="text-xs text-amber-400 font-medium">Admin: Autenticando...</p>
+                <p id="adminInfoTag" class="text-xs text-amber-400 font-medium">Painel Livre</p>
             </div>
         </div>
 
@@ -96,13 +64,6 @@
                 <i class="fa-solid fa-gears w-5 text-center"></i> <span>Configurações</span>
             </button>
         </nav>
-
-        <div class="p-4 border-t border-slate-800">
-            <button onclick="fazerLogout()"
-                class="w-full flex items-center justify-center gap-2 py-2.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-xl text-xs font-semibold transition">
-                <i class="fa-solid fa-right-from-bracket"></i> Sair da Conta
-            </button>
-        </div>
     </aside>
 
     <!-- CONTEÚDO PRINCIPAL -->
@@ -264,7 +225,7 @@
                     <table class="w-full text-left text-sm text-slate-300">
                         <thead class="bg-slate-800/80 text-xs uppercase text-slate-400 border-b border-slate-800">
                             <tr>
-                                <th class="p-4">ID Admin / Usuário</th>
+                                <th class="p-4">Operador</th>
                                 <th class="p-4">Ação</th>
                                 <th class="p-4">Detalhes</th>
                                 <th class="p-4 text-right">Data / Hora</th>
@@ -279,79 +240,8 @@
             <section id="section-configuracoes" class="space-y-6 hidden">
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-2xl space-y-6">
 
-                    <!-- OPÇÃO EXCLUSIVA DO SUPER ADMIN -->
-                    <div id="boxSuperAdminConfig" class="space-y-4">
-                        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                            <div>
-                                <h3 class="font-bold text-amber-400 text-base flex items-center gap-2">
-                                    <i class="fa-solid fa-crown text-amber-400"></i> Painel do Super Admin
-                                </h3>
-                                <p class="text-xs text-slate-400">Gerenciamento exclusivo de administradores e dados de
-                                    acesso.</p>
-                            </div>
-                            <button onclick="abrirModalAdmin()"
-                                class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5">
-                                <i class="fa-solid fa-user-plus"></i> Novo Admin
-                            </button>
-                        </div>
-
-                        <div>
-                            <button onclick="toggleListaAdmins()"
-                                class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-semibold flex items-center justify-between border border-slate-700 transition">
-                                <span class="flex items-center gap-2"><i class="fa-solid fa-users"></i> Ver
-                                    Administradores Cadastrados</span>
-                                <i id="iconToggleAdmins" class="fa-solid fa-chevron-down"></i>
-                            </button>
-
-                            <div id="containerListaAdmins"
-                                class="hidden mt-3 space-y-2 border border-slate-800 rounded-xl p-3 bg-slate-950/50">
-                                <div id="listaAdminsBody" class="divide-y divide-slate-800/60"></div>
-                            </div>
-                        </div>
-
-                        <!-- Alterar Usuário ou Senha do Super Admin -->
-                        <div class="p-4 bg-slate-800/40 rounded-xl border border-slate-800 space-y-3">
-                            <h4 class="text-xs font-bold text-slate-200">Alterar Credenciais do Super Admin</h4>
-                            <form onsubmit="alterarCredenciaisSuperAdmin(event)" class="space-y-3">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="block text-[11px] text-slate-400 mb-1">Novo Usuário</label>
-                                        <input type="text" id="inputSuperNovoUsuario" required
-                                            placeholder="Novo usuário..."
-                                            class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[11px] text-slate-400 mb-1">Nova Senha</label>
-                                        <input type="password" id="inputSuperNovaSenha" required
-                                            oninput="verificarForcaSenha(this.value, 'superSenhaMeter', 'superSenhaTxt')"
-                                            placeholder="••••••••"
-                                            class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200">
-                                    </div>
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                        <div id="superSenhaMeter"
-                                            class="h-full w-0 bg-rose-500 transition-all duration-300"></div>
-                                    </div>
-                                    <p id="superSenhaTxt" class="text-[10px] text-slate-500">Qualidade da senha</p>
-                                </div>
-                                <button type="submit"
-                                    class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl">
-                                    Salvar Alterações
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- MENSAGEM EXIBIDA PARA ADMINS COMUNS -->
-                    <div id="boxAdminComumNotice"
-                        class="hidden p-4 bg-slate-800/30 rounded-xl border border-slate-800 text-slate-400 text-xs">
-                        <p><i class="fa-solid fa-lock text-amber-400 mr-1.5"></i> Apenas o <strong>Super Admin</strong>
-                            tem permissão para cadastrar ou gerenciar outros administradores.</p>
-                    </div>
-
                     <!-- MODO TESTE & LIMPEZA AUTOMÁTICA -->
-                    <div class="pt-4 border-t border-slate-800 space-y-4">
+                    <div class="space-y-4">
                         <h3 class="font-bold text-slate-100 text-base">Modo Teste & Histórico</h3>
                         <p class="text-xs text-slate-400">Ative o modo teste para impedir que novos pedidos sejam salvos
                             no histórico de entregues. O histórico também limpa entregas com mais de 2 dias
@@ -374,7 +264,7 @@
                     </div>
 
                     <!-- CONEXÃO API -->
-                    <div>
+                    <div class="pt-4 border-t border-slate-800">
                         <h3 class="font-bold text-slate-100 text-base border-b border-slate-800 pb-2">Conexão API
                             (Django)</h3>
                         <div class="mt-4 space-y-3">
@@ -404,51 +294,6 @@
                 <span class="font-bold text-slate-400">Total do Pedido:</span>
                 <span id="modalVendaTotal" class="font-bold text-amber-400 text-base">R$ 0,00</span>
             </div>
-        </div>
-    </div>
-
-    <!-- MODAL NOVO ADMINISTRADOR -->
-    <div id="modalAdmin"
-        class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 class="font-bold text-slate-100 text-base">Adicionar Novo Administrador</h3>
-            <form onsubmit="salvarNovoAdmin(event)" class="space-y-3">
-                <div>
-                    <label class="block text-xs font-medium text-slate-400 mb-1">Usuário de Login</label>
-                    <input type="text" id="novoAdminUsuarioInput" required placeholder="Ex: joao.admin"
-                        class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-400 mb-1">Senha de Acesso</label>
-                    <input type="password" id="novoAdminSenhaInput" required
-                        oninput="verificarForcaSenha(this.value, 'novoSenhaMeter', 'novoSenhaTxt')"
-                        placeholder="••••••••"
-                        class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200">
-                    <div class="mt-2 space-y-1">
-                        <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                            <div id="novoSenhaMeter" class="h-full w-0 bg-rose-500 transition-all duration-300"></div>
-                        </div>
-                        <p id="novoSenhaTxt" class="text-[10px] text-slate-500">Qualidade da senha</p>
-                    </div>
-                </div>
-
-                <hr class="border-slate-800 my-2">
-
-                <div>
-                    <label class="block text-xs font-bold text-amber-400 mb-1"><i class="fa-solid fa-key"></i> Senha
-                        Atual do Super Admin</label>
-                    <input type="password" id="confirmacaoSenhaSuperAdmin" required placeholder="Confirme sua senha..."
-                        class="w-full p-2.5 bg-slate-800 border border-amber-500/40 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-amber-500">
-                </div>
-
-                <div class="flex justify-end gap-2 pt-2">
-                    <button type="button" onclick="fecharModalAdmin()"
-                        class="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm">Cancelar</button>
-                    <button type="submit"
-                        class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm">Cadastrar
-                        Admin</button>
-                </div>
-            </form>
         </div>
     </div>
 

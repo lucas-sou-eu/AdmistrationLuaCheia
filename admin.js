@@ -13,13 +13,6 @@ let vendasEntregues = JSON.parse(localStorage.getItem('LUA_CHEIA_VENDAS_ENTREGUE
 // Modo Teste e Histórico
 let modoTesteAtivo = localStorage.getItem('LUA_CHEIA_MODO_TESTE') === 'true';
 
-// Lista de Administradores no localStorage
-let listaAdmins = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || [
-    { id: "SUPER-ADM", usuario: "admin", senha: "admin", isSuper: true }
-];
-
-let adminLogado = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMIN_LOGADO')) || null;
-
 let abaAtiva = localStorage.getItem('LUA_CHEIA_ABA_ATIVA') || 'dashboard';
 let subAbaAtiva = localStorage.getItem('LUA_CHEIA_SUB_ABA_ATIVA') || 'produtos';
 let subAbaVendasAtiva = localStorage.getItem('LUA_CHEIA_SUB_ABA_VENDAS') || 'pendentes';
@@ -28,25 +21,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputApi = document.getElementById('inputApiUrlConfig');
     if (inputApi) inputApi.value = API_URL;
 
-    // Configura o estado visual do botão do Modo Teste
     const toggleTeste = document.getElementById('toggleModoTeste');
     if (toggleTeste) toggleTeste.checked = modoTesteAtivo;
 
-    // Executa a limpeza automática de histórico com mais de 2 dias
     limparHistoricoAntigoAutomatico();
 
     switchTab(abaAtiva, false);
     mudarSubAbaCatalogo(subAbaAtiva, false);
     mudarSubAbaVendas(subAbaVendasAtiva, false);
 
-    if (adminLogado && adminLogado.usuario) {
-        configurarInterfacePorPerfil();
-        carregarDadosDoBanco();
-        const modalLogin = document.getElementById('loginModal');
-        if (modalLogin) modalLogin.classList.add('hidden');
-    } else {
-        abrirModalLogin();
-    }
+    // Carrega diretamente do banco sem restrição de autenticação
+    carregarDadosDoBanco();
 
     const formProdutoEl = document.getElementById('formProduto');
     if (formProdutoEl) {
@@ -71,15 +56,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function verificarNovosPedidosBackground() {
     const pedidosSalvos = JSON.parse(localStorage.getItem('LUA_CHEIA_PEDIDOS_PENDENTES')) || [];
-
-    // Compara se o conteúdo real mudou para evitar sobrescrever a tela durante aprovações
     if (JSON.stringify(pedidosSalvos) !== JSON.stringify(pedidosPendentes)) {
         pedidosPendentes = pedidosSalvos;
         renderizarGestaoVendas();
     }
 }
 
-// MODO TESTE & LIMPEZA AUTOMÁTICA
 function alternarModoTeste(checkbox) {
     modoTesteAtivo = checkbox.checked;
     localStorage.setItem('LUA_CHEIA_MODO_TESTE', modoTesteAtivo);
@@ -95,7 +77,7 @@ function limparHistoricoAntigoAutomatico() {
     if (entregues.length === 0) return;
 
     const agora = Date.now();
-    const doisDiasEmMs = 2 * 24 * 60 * 60 * 1000; // 48 horas
+    const doisDiasEmMs = 2 * 24 * 60 * 60 * 1000;
 
     const filtrados = entregues.filter(item => {
         const timestampPedido = item.timestamp || (typeof item.id === 'number' ? item.id : parseInt(item.id)) || agora;
@@ -108,280 +90,11 @@ function limparHistoricoAntigoAutomatico() {
     }
 }
 
-// VERIFICAÇÃO DE FORÇA DE SENHA
-function verificarForcaSenha(senha, elMeterId, elTxtId) {
-    const meter = document.getElementById(elMeterId);
-    const txt = document.getElementById(elTxtId);
-    if (!meter || !txt) return;
-
-    let pontos = 0;
-    if (senha.length >= 6) pontos++;
-    if (senha.length >= 10) pontos++;
-    if (/[A-Z]/.test(senha)) pontos++;
-    if (/[0-9]/.test(senha)) pontos++;
-    if (/[^A-Za-z0-9]/.test(senha)) pontos++;
-
-    if (senha.length === 0) {
-        meter.style.width = '0%';
-        meter.className = 'h-full bg-slate-700 transition-all duration-300';
-        txt.textContent = 'Digite uma senha com letras, números e símbolos.';
-        txt.className = 'text-[10px] text-slate-500';
-    } else if (pontos <= 2) {
-        meter.style.width = '33%';
-        meter.className = 'h-full bg-rose-500 transition-all duration-300';
-        txt.textContent = 'Senha Fraca (adicione mais números/símbolos)';
-        txt.className = 'text-[10px] text-rose-400 font-medium';
-    } else if (pontos <= 4) {
-        meter.style.width = '66%';
-        meter.className = 'h-full bg-amber-500 transition-all duration-300';
-        txt.textContent = 'Senha Média';
-        txt.className = 'text-[10px] text-amber-400 font-medium';
-    } else {
-        meter.style.width = '100%';
-        meter.className = 'h-full bg-emerald-500 transition-all duration-300';
-        txt.textContent = 'Senha Forte ✓';
-        txt.className = 'text-[10px] text-emerald-400 font-bold';
-    }
-}
-
-// LOGIN SEGURO E UNIVERSAL
-function abrirModalLogin() {
-    const modal = document.getElementById('loginModal');
-    if (modal) modal.classList.remove('hidden');
-}
-
-async function realizarLogin(e) {
-    if (e) e.preventDefault();
-    const u = document.getElementById('loginUsuario').value.trim();
-    const s = document.getElementById('loginSenha').value.trim();
-
-    // 1. Tenta validar no Django com Timeout rápido
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5s limite
-
-        const response = await fetch(`${API_URL}/admins/`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-            const listaAdminsBanco = await response.json();
-            const adminEncontrado = listaAdminsBanco.find(a =>
-                (a.usuario === u || a.username === u) && (a.senha === s || a.password === s)
-            );
-
-            if (adminEncontrado) {
-                concluirLogin({
-                    id: adminEncontrado.id || "ADM-BD",
-                    usuario: adminEncontrado.usuario || adminEncontrado.username,
-                    isSuper: adminEncontrado.is_super || adminEncontrado.isSuper || false
-                });
-                return false;
-            }
-        }
-    } catch (err) {
-        console.warn("Autenticação via API indisponível. Alternando para validação local.", err);
-    }
-
-    // 2. Fallback Seguro no LocalStorage (Funciona em qualquer dispositivo/GitHub Pages)
-    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST'));
-    if (!Array.isArray(adminsLocais) || adminsLocais.length === 0) {
-        adminsLocais = [
-            { id: "SUPER-ADM", usuario: "admin", senha: "admin", isSuper: true }
-        ];
-        localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(adminsLocais));
-    }
-
-    const adminLocal = adminsLocais.find(a => a.usuario === u && a.senha === s);
-
-    if (adminLocal) {
-        concluirLogin(adminLocal);
-    } else {
-        showToast("Usuário ou senha incorretos!", "error");
-    }
-
-    return false;
-}
-
-function concluirLogin(adminObj) {
-    adminLogado = adminObj;
-    localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
-
-    const modalLogin = document.getElementById('loginModal');
-    if (modalLogin) modalLogin.classList.add('hidden');
-
-    configurarInterfacePorPerfil();
-    showToast(`Bem-vindo, @${adminLogado.usuario}!`, "success");
-    carregarDadosDoBanco();
-}
-
-function configurarInterfacePorPerfil() {
-    if (!adminLogado) return;
-
-    const infoTag = document.getElementById('adminInfoTag');
-    if (infoTag) infoTag.textContent = `${adminLogado.isSuper ? '👑 Super Admin' : 'Admin'}: @${adminLogado.usuario}`;
-
-    const boxSuper = document.getElementById('boxSuperAdminConfig');
-    const boxNotice = document.getElementById('boxAdminComumNotice');
-
-    if (adminLogado.isSuper) {
-        if (boxSuper) boxSuper.classList.remove('hidden');
-        if (boxNotice) boxNotice.classList.add('hidden');
-        const inputSuperUser = document.getElementById('inputSuperNovoUsuario');
-        if (inputSuperUser) inputSuperUser.value = adminLogado.usuario;
-        renderizarListaAdmins();
-    } else {
-        if (boxSuper) boxSuper.classList.add('hidden');
-        if (boxNotice) boxNotice.classList.remove('hidden');
-    }
-}
-
-function fazerLogout() {
-    localStorage.removeItem('LUA_CHEIA_ADMIN_LOGADO');
-    adminLogado = null;
-    abrirModalLogin();
-}
-
-function alterarCredenciaisSuperAdmin(e) {
-    if (e) e.preventDefault();
-    if (!adminLogado || !adminLogado.isSuper) return;
-
-    const novoUser = document.getElementById('inputSuperNovoUsuario').value.trim();
-    const novaPass = document.getElementById('inputSuperNovaSenha').value.trim();
-
-    if (!novoUser || !novaPass) {
-        showToast("Preencha o novo usuário e a nova senha.", "error");
-        return;
-    }
-
-    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
-    const idx = adminsLocais.findIndex(a => a.isSuper);
-    if (idx !== -1) {
-        adminsLocais[idx].usuario = novoUser;
-        adminsLocais[idx].senha = novaPass;
-    }
-
-    adminLogado.usuario = novoUser;
-    adminLogado.senha = novaPass;
-
-    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(adminsLocais));
-    localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
-
-    document.getElementById('inputSuperNovaSenha').value = '';
-    document.getElementById('superSenhaMeter').style.width = '0%';
-    document.getElementById('superSenhaTxt').textContent = 'Qualidade da senha';
-
-    configurarInterfacePorPerfil();
-    registrarRelatorio('ALTERAR CREDENCIAIS', `Super Admin atualizou usuário para @${novoUser}`);
-    showToast("Credenciais do Super Admin alteradas com sucesso!", "success");
-    return false;
-}
-
-function toggleListaAdmins() {
-    const container = document.getElementById('containerListaAdmins');
-    const icon = document.getElementById('iconToggleAdmins');
-    if (!container || !icon) return;
-    container.classList.toggle('hidden');
-    icon.className = container.classList.contains('hidden') ? "fa-solid fa-chevron-down" : "fa-solid fa-chevron-up";
-}
-
-function renderizarListaAdmins() {
-    const body = document.getElementById('listaAdminsBody');
-    if (!body) return;
-
-    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
-
-    body.innerHTML = adminsLocais.map(a => `
-        <div class="py-2.5 flex items-center justify-between text-xs">
-            <div>
-                <span class="font-mono text-amber-400 font-bold">${a.id}</span>
-                <span class="text-slate-200 font-semibold ml-2">@${a.usuario}</span>
-                ${a.isSuper ? '<span class="ml-2 px-2 py-0.5 bg-amber-500/20 text-amber-300 font-bold rounded text-[10px]">Super Admin</span>' : ''}
-            </div>
-            ${!a.isSuper ? `
-                <button onclick="excluirAdmin('${a.id}')" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
-            ` : ''}
-        </div>
-    `).join('');
-}
-
-function abrirModalAdmin() {
-    if (!adminLogado || !adminLogado.isSuper) return;
-
-    document.getElementById('novoAdminUsuarioInput').value = '';
-    document.getElementById('novoAdminSenhaInput').value = '';
-    document.getElementById('confirmacaoSenhaSuperAdmin').value = '';
-    document.getElementById('novoSenhaMeter').style.width = '0%';
-    document.getElementById('novoSenhaTxt').textContent = 'Qualidade da senha';
-
-    document.getElementById('modalAdmin').classList.remove('hidden');
-}
-
-function fecharModalAdmin() {
-    document.getElementById('modalAdmin').classList.add('hidden');
-}
-
-function salvarNovoAdmin(e) {
-    if (e) e.preventDefault();
-    if (!adminLogado || !adminLogado.isSuper) return;
-
-    const usuario = document.getElementById('novoAdminUsuarioInput').value.trim();
-    const senha = document.getElementById('novoAdminSenhaInput').value.trim();
-    const confirmacaoSuper = document.getElementById('confirmacaoSenhaSuperAdmin').value.trim();
-
-    if (confirmacaoSuper !== adminLogado.senha) {
-        showToast("Senha do Super Admin incorreta!", "error");
-        return;
-    }
-
-    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
-
-    if (adminsLocais.some(a => a.usuario === usuario)) {
-        showToast("Este usuário de login já existe!", "error");
-        return;
-    }
-
-    const novoId = `ADM-00${adminsLocais.length}`;
-    adminsLocais.push({ id: novoId, usuario, senha, isSuper: false });
-
-    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(adminsLocais));
-
-    renderizarListaAdmins();
-    fecharModalAdmin();
-    registrarRelatorio('CRIAR ADMIN', `Novo Admin cadastrado: @${usuario}`);
-    showToast("Novo Administrador cadastrado com sucesso!", "success");
-    return false;
-}
-
-function excluirAdmin(id) {
-    if (!adminLogado || !adminLogado.isSuper) return;
-
-    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
-    const adminParaExcluir = adminsLocais.find(a => a.id === id);
-
-    if (adminParaExcluir && adminParaExcluir.isSuper) return;
-
-    if (!confirm(`Deseja remover o administrador "@${adminParaExcluir ? adminParaExcluir.usuario : id}"?`)) return;
-
-    adminsLocais = adminsLocais.filter(a => a.id !== id);
-    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(adminsLocais));
-
-    renderizarListaAdmins();
-    registrarRelatorio('EXCLUIR ADMIN', `Admin removido ID: ${id}`);
-    showToast("Administrador removido!", "success");
-}
-
 function registrarRelatorio(acao, detalhes) {
-    if (!adminLogado) return;
     const novoLog = {
         id: Date.now(),
-        adminId: adminLogado.id,
-        adminNome: `@${adminLogado.usuario}`,
+        adminId: "ADMIN",
+        adminNome: "@sistema",
         acao: acao,
         detalhes: detalhes,
         data: new Date().toLocaleString('pt-BR')
@@ -543,19 +256,15 @@ async function confirmarPedidoBanco(id) {
 
     if (!confirm(`Aprovar pedido #${id}? Isso irá abater o estoque dos produtos no banco de dados.`)) return;
 
-    // 1. Remove da lista local de pendentes e adiciona às confirmadas IMEDIATAMENTE
     const [pedidoAprovado] = pedidosPendentes.splice(index, 1);
     vendasConfirmadas.unshift(pedidoAprovado);
 
-    // 2. Salva no localStorage na hora para impedir que o polling recupere o pedido
     localStorage.setItem('LUA_CHEIA_PEDIDOS_PENDENTES', JSON.stringify(pedidosPendentes));
     localStorage.setItem('LUA_CHEIA_VENDAS_CONFIRMADAS', JSON.stringify(vendasConfirmadas));
 
-    // 3. Atualiza a interface instantaneamente na tela
     renderizarGestaoVendas();
     showToast(`Pedido #${id} aprovado e movido para Vendas Confirmadas!`, "success");
 
-    // 4. Abate o estoque no servidor em segundo plano sem travar a interface
     if (Array.isArray(pedidoAprovado.itens)) {
         for (const item of pedidoAprovado.itens) {
             try {
@@ -599,7 +308,7 @@ function recusarPedido(id) {
 
 function marcarComoEntregue(id) {
     const idStr = String(id);
-    const venda = vendasConfirmadas.find(v => String(v.id) === idStr);
+    const venda = vendasConfirmadas.find(v => String(v.id) !== idStr);
     if (!venda) return;
 
     vendasConfirmadas = vendasConfirmadas.filter(v => String(v.id) !== idStr);
