@@ -308,7 +308,7 @@ function recusarPedido(id) {
 
 function marcarComoEntregue(id) {
     const idStr = String(id);
-    const venda = vendasConfirmadas.find(v => String(v.id) !== idStr);
+    const venda = vendasConfirmadas.find(v => String(v.id) === idStr);
     if (!venda) return;
 
     vendasConfirmadas = vendasConfirmadas.filter(v => String(v.id) !== idStr);
@@ -533,6 +533,10 @@ function atualizarPreviewPorUrl() {
     if (url && imgPreview && previewText) {
         imgPreview.src = url;
         previewText.textContent = "Imagem da URL informada.";
+
+        // Limpa o campo de arquivo local para evitar conflitos
+        const fileInput = document.getElementById('prodImagemFile');
+        if (fileInput) fileInput.value = '';
     } else if (imgPreview && previewText) {
         imgPreview.src = 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=100&q=80';
         previewText.textContent = "Nenhuma imagem selecionada.";
@@ -545,6 +549,10 @@ function atualizarPreviewPorArquivo(input) {
     const previewText = document.getElementById('previewText');
 
     if (file && imgPreview && previewText) {
+        // Limpa o campo de URL para evitar conflitos
+        const urlInput = document.getElementById('prodImagemUrl');
+        if (urlInput) urlInput.value = '';
+
         const reader = new FileReader();
         reader.onload = function (e) {
             imgPreview.src = e.target.result;
@@ -554,8 +562,21 @@ function atualizarPreviewPorArquivo(input) {
     }
 }
 
+// Variável de controle para impedir duplo envio
+let salvandoProdutoEmAndamento = false;
+
 async function salvarProduto(e) {
     if (e) e.preventDefault();
+
+    // Se já estiver a salvar, ignora cliques adicionais imediatamente
+    if (salvandoProdutoEmAndamento) return false;
+    salvandoProdutoEmAndamento = true;
+
+    const form = document.getElementById('formProduto');
+    const overlay = document.getElementById('loadingOverlayProduto');
+    const btnSalvar = document.getElementById('btnSalvarProduto');
+    const btnSalvarTexto = document.getElementById('btnSalvarProdutoTexto');
+    const btnCancelar = document.getElementById('btnCancelarProduto');
 
     const id = document.getElementById('prodId').value;
     const nome = document.getElementById('prodNome').value;
@@ -568,14 +589,29 @@ async function salvarProduto(e) {
     formData.append('descricao', document.getElementById('prodDescricao').value);
     formData.append('disponivel', 'true');
 
+    // Tratamento exclusivo para evitar duplicação ou conflito de imagens
     const urlInput = document.getElementById('prodImagemUrl').value.trim();
-    if (urlInput) formData.append('imagem_url', urlInput);
-
     const arquivoInput = document.getElementById('prodImagemFile');
-    if (arquivoInput.files[0]) formData.append('imagem', arquivoInput.files[0]);
+
+    if (arquivoInput && arquivoInput.files && arquivoInput.files[0]) {
+        formData.append('imagem', arquivoInput.files[0]);
+    } else if (urlInput) {
+        formData.append('imagem_url', urlInput);
+    }
 
     const url = id ? `${API_URL}/produtos/${id}/` : `${API_URL}/produtos/`;
     const method = id ? 'PATCH' : 'POST';
+
+    // ATIVA O LOADING E BLOQUEIA A INTERFACE
+    if (overlay) overlay.classList.remove('hidden');
+    if (btnSalvar) btnSalvar.disabled = true;
+    if (btnCancelar) btnCancelar.disabled = true;
+    if (btnSalvarTexto) {
+        btnSalvarTexto.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> A salvar...`;
+    }
+
+    const inputs = form.querySelectorAll('input, select, textarea, button');
+    inputs.forEach(input => input.disabled = true);
 
     try {
         const res = await fetch(url, { method, body: formData });
@@ -589,6 +625,16 @@ async function salvarProduto(e) {
         }
     } catch (err) {
         showToast("Erro de comunicação com o servidor.", "error");
+    } finally {
+        // LIBERA O CONTROLE APÓS O FIM DA REQUISIÇÃO
+        salvandoProdutoEmAndamento = false;
+
+        if (overlay) overlay.classList.add('hidden');
+        if (btnSalvar) btnSalvar.disabled = false;
+        if (btnCancelar) btnCancelar.disabled = false;
+        if (btnSalvarTexto) btnSalvarTexto.textContent = "Salvar no Banco";
+
+        inputs.forEach(input => input.disabled = false);
     }
     return false;
 }
