@@ -13,7 +13,7 @@ let vendasEntregues = JSON.parse(localStorage.getItem('LUA_CHEIA_VENDAS_ENTREGUE
 // Modo Teste e Histórico
 let modoTesteAtivo = localStorage.getItem('LUA_CHEIA_MODO_TESTE') === 'true';
 
-// Lista de Administradores
+// Lista de Administradores no localStorage
 let listaAdmins = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || [
     { id: "SUPER-ADM", usuario: "admin", senha: "admin", isSuper: true }
 ];
@@ -144,7 +144,7 @@ function verificarForcaSenha(senha, elMeterId, elTxtId) {
     }
 }
 
-// LOGIN
+// LOGIN SEGURO E UNIVERSAL
 function abrirModalLogin() {
     const modal = document.getElementById('loginModal');
     if (modal) modal.classList.remove('hidden');
@@ -155,12 +155,17 @@ async function realizarLogin(e) {
     const u = document.getElementById('loginUsuario').value.trim();
     const s = document.getElementById('loginSenha').value.trim();
 
+    // 1. Tenta validar no Django com Timeout rápido
     try {
-        // 1. Tenta buscar os administradores do banco Django
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5s limite
+
         const response = await fetch(`${API_URL}/admins/`, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         if (response.ok) {
             const listaAdminsBanco = await response.json();
@@ -175,17 +180,14 @@ async function realizarLogin(e) {
                     isSuper: adminEncontrado.is_super || adminEncontrado.isSuper || false
                 });
                 return false;
-            } else {
-                showToast("Usuário ou senha incorretos no banco!", "error");
-                return false;
             }
         }
     } catch (err) {
-        console.warn("Rota /admins/ não encontrada no Django. Usando validação local/fallback.", err);
+        console.warn("Autenticação via API indisponível. Alternando para validação local.", err);
     }
 
-    // 2. FALLBACK SEGURO (Caso a rota /admins/ não exista no Django ou retorne 404)
-    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || [];
+    // 2. Fallback Seguro no LocalStorage (Funciona em qualquer dispositivo/GitHub Pages)
+    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST'));
     if (!Array.isArray(adminsLocais) || adminsLocais.length === 0) {
         adminsLocais = [
             { id: "SUPER-ADM", usuario: "admin", senha: "admin", isSuper: true }
@@ -194,6 +196,7 @@ async function realizarLogin(e) {
     }
 
     const adminLocal = adminsLocais.find(a => a.usuario === u && a.senha === s);
+
     if (adminLocal) {
         concluirLogin(adminLocal);
     } else {
@@ -203,7 +206,6 @@ async function realizarLogin(e) {
     return false;
 }
 
-// Função auxiliar para finalizar o login de forma limpa
 function concluirLogin(adminObj) {
     adminLogado = adminObj;
     localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
@@ -255,16 +257,17 @@ function alterarCredenciaisSuperAdmin(e) {
         return;
     }
 
-    const idx = listaAdmins.findIndex(a => a.isSuper);
+    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
+    const idx = adminsLocais.findIndex(a => a.isSuper);
     if (idx !== -1) {
-        listaAdmins[idx].usuario = novoUser;
-        listaAdmins[idx].senha = novaPass;
+        adminsLocais[idx].usuario = novoUser;
+        adminsLocais[idx].senha = novaPass;
     }
 
     adminLogado.usuario = novoUser;
     adminLogado.senha = novaPass;
 
-    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(listaAdmins));
+    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(adminsLocais));
     localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
 
     document.getElementById('inputSuperNovaSenha').value = '';
@@ -289,7 +292,9 @@ function renderizarListaAdmins() {
     const body = document.getElementById('listaAdminsBody');
     if (!body) return;
 
-    body.innerHTML = listaAdmins.map(a => `
+    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
+
+    body.innerHTML = adminsLocais.map(a => `
         <div class="py-2.5 flex items-center justify-between text-xs">
             <div>
                 <span class="font-mono text-amber-400 font-bold">${a.id}</span>
@@ -334,15 +339,17 @@ function salvarNovoAdmin(e) {
         return;
     }
 
-    if (listaAdmins.some(a => a.usuario === usuario)) {
+    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
+
+    if (adminsLocais.some(a => a.usuario === usuario)) {
         showToast("Este usuário de login já existe!", "error");
         return;
     }
 
-    const novoId = `ADM-00${listaAdmins.length}`;
-    listaAdmins.push({ id: novoId, usuario, senha, isSuper: false });
+    const novoId = `ADM-00${adminsLocais.length}`;
+    adminsLocais.push({ id: novoId, usuario, senha, isSuper: false });
 
-    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(listaAdmins));
+    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(adminsLocais));
 
     renderizarListaAdmins();
     fecharModalAdmin();
@@ -354,13 +361,15 @@ function salvarNovoAdmin(e) {
 function excluirAdmin(id) {
     if (!adminLogado || !adminLogado.isSuper) return;
 
-    const adminParaExcluir = listaAdmins.find(a => a.id === id);
+    let adminsLocais = JSON.parse(localStorage.getItem('LUA_CHEIA_ADMINS_LIST')) || listaAdmins;
+    const adminParaExcluir = adminsLocais.find(a => a.id === id);
+
     if (adminParaExcluir && adminParaExcluir.isSuper) return;
 
     if (!confirm(`Deseja remover o administrador "@${adminParaExcluir ? adminParaExcluir.usuario : id}"?`)) return;
 
-    listaAdmins = listaAdmins.filter(a => a.id !== id);
-    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(listaAdmins));
+    adminsLocais = adminsLocais.filter(a => a.id !== id);
+    localStorage.setItem('LUA_CHEIA_ADMINS_LIST', JSON.stringify(adminsLocais));
 
     renderizarListaAdmins();
     registrarRelatorio('EXCLUIR ADMIN', `Admin removido ID: ${id}`);
@@ -523,7 +532,6 @@ function renderizarGestaoVendas() {
     }
 }
 
-// FUNÇÃO ATUALIZADA: Aprovação direta + Abatimento assíncrono seguro
 async function confirmarPedidoBanco(id) {
     const idStr = String(id);
     const index = pedidosPendentes.findIndex(p => String(p.id) === idStr);
