@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel Administrativo | Lua Cheia</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -26,7 +25,6 @@
 
 <body class="min-h-screen flex flex-col md:flex-row antialiased overflow-x-hidden bg-slate-950 text-slate-100">
 
-    <!-- OVERLAY PARA MOBILE -->
     <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 z-30 hidden md:hidden" onclick="toggleMobileSidebar()">
     </div>
 
@@ -125,7 +123,6 @@
                         Categorias</button>
                 </div>
 
-                <!-- SUB-SEÇÃO PRODUTOS -->
                 <div id="subsect-produtos" class="space-y-4">
                     <div
                         class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-slate-900 p-4 border border-slate-800 rounded-2xl">
@@ -155,7 +152,6 @@
                     </div>
                 </div>
 
-                <!-- SUB-SEÇÃO CATEGORIAS -->
                 <div id="subsect-categorias" class="space-y-4 hidden">
                     <div class="flex justify-between items-center bg-slate-900 p-4 border border-slate-800 rounded-2xl">
                         <h3 class="font-bold text-slate-100">Categorias do Cardápio</h3>
@@ -185,24 +181,14 @@
                     </button>
                 </div>
 
-                <!-- 1. Pedidos Pendentes de Aprovação -->
                 <div id="subsect-vendas-pendentes" class="space-y-4">
-                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center">
-                        <div>
-                            <h3 class="font-bold text-slate-100 text-sm">Aprovações de Pedidos</h3>
-                            <p class="text-xs text-slate-400">Aprove o pedido para abater o estoque automaticamente no
-                                banco de dados.</p>
-                        </div>
-                    </div>
                     <div id="gridPedidosPendentes" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                 </div>
 
-                <!-- 2. Vendas Confirmadas -->
                 <div id="subsect-vendas-confirmadas" class="space-y-4 hidden">
                     <div id="gridVendasConfirmadas" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                 </div>
 
-                <!-- 3. Histórico Entregues -->
                 <div id="subsect-vendas-entregues" class="space-y-4 hidden">
                     <div id="gridVendasEntregues" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                 </div>
@@ -239,8 +225,6 @@
             <!-- CONFIGURAÇÕES -->
             <section id="section-configuracoes" class="space-y-6 hidden">
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-2xl space-y-6">
-
-                    <!-- MODO TESTE & LIMPEZA AUTOMÁTICA -->
                     <div class="space-y-4">
                         <h3 class="font-bold text-slate-100 text-base">Modo Teste & Histórico</h3>
                         <p class="text-xs text-slate-400">Ative o modo teste para impedir que novos pedidos sejam salvos
@@ -263,7 +247,6 @@
                         </div>
                     </div>
 
-                    <!-- CONEXÃO API -->
                     <div class="pt-4 border-t border-slate-800">
                         <h3 class="font-bold text-slate-100 text-base border-b border-slate-800 pb-2">Conexão API
                             (Django)</h3>
@@ -297,14 +280,11 @@
         </div>
     </div>
 
-    <!-- MODAL PRODUTO -->
     <!-- MODAL PRODUTO COM OVERLAY DE LOADING -->
     <div id="modalProduto"
         class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div
             class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto relative">
-
-            <!-- OVERLAY DE BLOQUEIO / LOADING -->
             <div id="loadingOverlayProduto"
                 class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center gap-3 rounded-2xl hidden">
                 <div class="w-10 h-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>

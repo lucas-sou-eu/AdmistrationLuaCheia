@@ -4,7 +4,6 @@ body {
     color: #f8fafc;
 }
 
-/* Scrollbar Customizada */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -19,14 +18,12 @@ body {
     border-radius: 4px;
 }
 
-/* Gradiente de Texto Dourado/Laranja */
 .gold-gradient-text {
     background: linear-gradient(135deg, #f1c40f 0%, #f39c12 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
-/* Estilo Padrão das Opções do Menu Lateral */
 .nav-btn {
     color: #94a3b8;
     background-color: transparent;
@@ -38,10 +35,8 @@ body {
     background-color: rgba(51, 65, 85, 0.6);
 }
 
-/* ESTILO ATIVO (Opção Selecionada no Laranja / Amber) */
 .nav-btn.active {
     color: #fbbf24 !important;
-    /* Laranja/Amarelo Ambar */
     background-color: rgba(245, 158, 11, 0.15) !important;
     border-color: rgba(245, 158, 11, 0.3) !important;
     font-weight: 600;

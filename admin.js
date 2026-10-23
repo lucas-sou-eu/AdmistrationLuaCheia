@@ -10,7 +10,6 @@ let pedidosPendentes = JSON.parse(localStorage.getItem('LUA_CHEIA_PEDIDOS_PENDEN
 let vendasConfirmadas = JSON.parse(localStorage.getItem('LUA_CHEIA_VENDAS_CONFIRMADAS')) || [];
 let vendasEntregues = JSON.parse(localStorage.getItem('LUA_CHEIA_VENDAS_ENTREGUES')) || [];
 
-// Modo Teste e Histórico
 let modoTesteAtivo = localStorage.getItem('LUA_CHEIA_MODO_TESTE') === 'true';
 
 let abaAtiva = localStorage.getItem('LUA_CHEIA_ABA_ATIVA') || 'dashboard';
@@ -30,7 +29,6 @@ document.addEventListener('DOMContentLoaded', () => {
     mudarSubAbaCatalogo(subAbaAtiva, false);
     mudarSubAbaVendas(subAbaVendasAtiva, false);
 
-    // Carrega diretamente do banco sem restrição de autenticação
     carregarDadosDoBanco();
 
     const formProdutoEl = document.getElementById('formProduto');
@@ -54,11 +52,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3000);
 });
 
-function verificarNovosPedidosBackground() {
-    const pedidosSalvos = JSON.parse(localStorage.getItem('LUA_CHEIA_PEDIDOS_PENDENTES')) || [];
-    if (JSON.stringify(pedidosSalvos) !== JSON.stringify(pedidosPendentes)) {
-        pedidosPendentes = pedidosSalvos;
-        renderizarGestaoVendas();
+async function verificarNovosPedidosBackground() {
+    try {
+        const res = await fetch(`${API_URL}/pedidos/`);
+        if (res.ok) {
+            const todosPedidos = await res.json();
+            pedidosPendentes = todosPedidos.filter(p => p.status === 'pendente');
+            vendasConfirmadas = todosPedidos.filter(p => p.status === 'confirmado');
+            vendasEntregues = todosPedidos.filter(p => p.status === 'entregue');
+            renderizarGestaoVendas();
+        }
+    } catch (e) {
+        const pedidosSalvos = JSON.parse(localStorage.getItem('LUA_CHEIA_PEDIDOS_PENDENTES')) || [];
+        if (JSON.stringify(pedidosSalvos) !== JSON.stringify(pedidosPendentes)) {
+            pedidosPendentes = pedidosSalvos;
+            renderizarGestaoVendas();
+        }
     }
 }
 
@@ -192,10 +201,10 @@ function renderizarGestaoVendas() {
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
                 <div class="flex justify-between items-start">
                     <div>
-                        <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">${p.id}</span>
-                        <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${p.id}</h4>
+                        <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">${p.codigo || p.id}</span>
+                        <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${p.codigo || p.id}</h4>
                         <p class="text-xs font-semibold text-amber-400 mt-0.5"><i class="fa-solid fa-user text-[10px] mr-1"></i>${p.cliente || 'Cliente não identificado'}</p>
-                        <p class="text-xs text-slate-400">${p.dataHora || ''}</p>
+                        <p class="text-xs text-slate-400">${p.dataHora || p.criado_em || ''}</p>
                     </div>
                     <span class="font-bold text-amber-400 text-sm">R$ ${parseFloat(p.total).toFixed(2).replace('.', ',')}</span>
                 </div>
@@ -215,9 +224,9 @@ function renderizarGestaoVendas() {
                 <div class="flex justify-between items-start">
                     <div>
                         <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">CONFIRMADO</span>
-                        <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${v.id}</h4>
+                        <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${v.codigo || v.id}</h4>
                         <p class="text-xs font-semibold text-emerald-400 mt-0.5"><i class="fa-solid fa-user text-[10px] mr-1"></i>${v.cliente || 'Cliente não identificado'}</p>
-                        <p class="text-xs text-slate-400">${v.dataHora || ''}</p>
+                        <p class="text-xs text-slate-400">${v.dataHora || v.criado_em || ''}</p>
                     </div>
                     <span class="font-bold text-amber-400 text-sm">R$ ${parseFloat(v.total).toFixed(2).replace('.', ',')}</span>
                 </div>
@@ -236,9 +245,9 @@ function renderizarGestaoVendas() {
                 <div class="flex justify-between items-start">
                     <div>
                         <span class="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">ENTREGUE</span>
-                        <h4 class="font-bold text-slate-300 text-sm mt-1">Pedido #${e.id}</h4>
+                        <h4 class="font-bold text-slate-300 text-sm mt-1">Pedido #${e.codigo || e.id}</h4>
                         <p class="text-xs font-semibold text-slate-400 mt-0.5"><i class="fa-solid fa-user text-[10px] mr-1"></i>${e.cliente || 'Cliente não identificado'}</p>
-                        <p class="text-xs text-slate-500">${e.dataHora || ''}</p>
+                        <p class="text-xs text-slate-500">${e.dataHora || e.criado_em || ''}</p>
                     </div>
                     <span class="font-semibold text-slate-300 text-sm">R$ ${parseFloat(e.total).toFixed(2).replace('.', ',')}</span>
                 </div>
@@ -266,7 +275,15 @@ async function confirmarPedidoBanco(id) {
     localStorage.setItem('LUA_CHEIA_VENDAS_CONFIRMADAS', JSON.stringify(vendasConfirmadas));
 
     renderizarGestaoVendas();
-    showToast(`Pedido #${id} aprovado e movido para Vendas Confirmadas!`, "success");
+    showToast(`Pedido aprovado e movido para Vendas Confirmadas!`, "success");
+
+    try {
+        await fetch(`${API_URL}/pedidos/${id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'confirmado' })
+        });
+    } catch (e) { }
 
     if (Array.isArray(pedidoAprovado.itens)) {
         for (const item of pedidoAprovado.itens) {
@@ -300,16 +317,25 @@ async function confirmarPedidoBanco(id) {
     carregarDadosSilencioso();
 }
 
-function recusarPedido(id) {
+async function recusarPedido(id) {
     if (!confirm("Deseja recusar este pedido?")) return;
     const idStr = String(id);
     pedidosPendentes = pedidosPendentes.filter(p => String(p.id) !== idStr);
     localStorage.setItem('LUA_CHEIA_PEDIDOS_PENDENTES', JSON.stringify(pedidosPendentes));
+
+    try {
+        await fetch(`${API_URL}/pedidos/${id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'recusado' })
+        });
+    } catch (e) { }
+
     renderizarGestaoVendas();
     showToast("Pedido recusado.", "info");
 }
 
-function marcarComoEntregue(id) {
+async function marcarComoEntregue(id) {
     const idStr = String(id);
     const venda = vendasConfirmadas.find(v => String(v.id) === idStr);
     if (!venda) return;
@@ -321,6 +347,15 @@ function marcarComoEntregue(id) {
         venda.timestamp = Date.now();
         vendasEntregues.unshift(venda);
         localStorage.setItem('LUA_CHEIA_VENDAS_ENTREGUES', JSON.stringify(vendasEntregues));
+
+        try {
+            await fetch(`${API_URL}/pedidos/${id}/`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'entregue' })
+            });
+        } catch (e) { }
+
         showToast("Venda movida para o histórico de entregues!", "success");
     } else {
         showToast("Venda concluída (Modo Teste: ignorada no histórico).", "info");
@@ -339,7 +374,7 @@ function abrirDetalhesVenda(tipo, id) {
     const conteudo = document.getElementById('modalVendaConteudo');
     const modal = document.getElementById('modalDetalhesVenda');
 
-    if (tituloEl) tituloEl.textContent = `Detalhes do Pedido #${p.id}`;
+    if (tituloEl) tituloEl.textContent = `Detalhes do Pedido #${p.codigo || p.id}`;
     if (totalEl) totalEl.textContent = `R$ ${parseFloat(p.total).toFixed(2).replace('.', ',')}`;
 
     if (conteudo) {
@@ -350,13 +385,13 @@ function abrirDetalhesVenda(tipo, id) {
             </div>
         `;
 
-        let htmlItens = p.itens.map(i => `
+        let htmlItens = (p.itens || []).map(i => `
             <div class="flex justify-between items-center py-2 border-b border-slate-800">
                 <div>
-                    <p class="font-bold text-slate-200">${i.nome}</p>
+                    <p class="font-bold text-slate-200">${i.nome_produto || i.nome}</p>
                     <p class="text-[10px] text-slate-400">Quantidade: ${i.quantidade} un</p>
                 </div>
-                <span class="font-semibold text-amber-400">R$ ${(i.preco * i.quantidade).toFixed(2).replace('.', ',')}</span>
+                <span class="font-semibold text-amber-400">R$ ${((i.preco_unitario || i.preco) * i.quantidade).toFixed(2).replace('.', ',')}</span>
             </div>
         `).join('');
 
@@ -376,15 +411,23 @@ async function carregarDadosDoBanco(manual = false) {
     const badgeText = document.getElementById('apiStatusText');
 
     try {
-        const [resProd, resCat] = await Promise.all([
+        const [resProd, resCat, resPed] = await Promise.all([
             fetch(`${API_URL}/produtos/`),
-            fetch(`${API_URL}/categorias/`)
+            fetch(`${API_URL}/categorias/`),
+            fetch(`${API_URL}/pedidos/`)
         ]);
 
         if (!resProd.ok || !resCat.ok) throw new Error("Erro ao aceder ao banco");
 
         produtos = await resProd.json();
         categorias = await resCat.json();
+
+        if (resPed.ok) {
+            const todosPedidos = await resPed.json();
+            pedidosPendentes = todosPedidos.filter(p => p.status === 'pendente');
+            vendasConfirmadas = todosPedidos.filter(p => p.status === 'confirmado');
+            vendasEntregues = todosPedidos.filter(p => p.status === 'entregue');
+        }
 
         if (badgeDot && badgeText) {
             badgeDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
@@ -545,8 +588,6 @@ function atualizarPreviewPorUrl() {
     if (url && imgPreview && previewText) {
         imgPreview.src = url;
         previewText.textContent = "Imagem da URL informada.";
-
-        // Limpa o campo de arquivo local para evitar conflitos
         const fileInput = document.getElementById('prodImagemFile');
         if (fileInput) fileInput.value = '';
     } else if (imgPreview && previewText) {
@@ -561,7 +602,6 @@ function atualizarPreviewPorArquivo(input) {
     const previewText = document.getElementById('previewText');
 
     if (file && imgPreview && previewText) {
-        // Limpa o campo de URL para evitar conflitos
         const urlInput = document.getElementById('prodImagemUrl');
         if (urlInput) urlInput.value = '';
 
@@ -574,13 +614,11 @@ function atualizarPreviewPorArquivo(input) {
     }
 }
 
-// Variável de controle para impedir duplo envio
 let salvandoProdutoEmAndamento = false;
 
 async function salvarProduto(e) {
     if (e) e.preventDefault();
 
-    // Se já estiver a salvar, ignora cliques adicionais imediatamente
     if (salvandoProdutoEmAndamento) return false;
     salvandoProdutoEmAndamento = true;
 
@@ -601,7 +639,6 @@ async function salvarProduto(e) {
     formData.append('descricao', document.getElementById('prodDescricao').value);
     formData.append('disponivel', 'true');
 
-    // Tratamento exclusivo para evitar duplicação ou conflito de imagens
     const urlInput = document.getElementById('prodImagemUrl').value.trim();
     const arquivoInput = document.getElementById('prodImagemFile');
 
@@ -614,7 +651,6 @@ async function salvarProduto(e) {
     const url = id ? `${API_URL}/produtos/${id}/` : `${API_URL}/produtos/`;
     const method = id ? 'PATCH' : 'POST';
 
-    // ATIVA O LOADING E BLOQUEIA A INTERFACE
     if (overlay) overlay.classList.remove('hidden');
     if (btnSalvar) btnSalvar.disabled = true;
     if (btnCancelar) btnCancelar.disabled = true;
@@ -638,7 +674,6 @@ async function salvarProduto(e) {
     } catch (err) {
         showToast("Erro de comunicação com o servidor.", "error");
     } finally {
-        // LIBERA O CONTROLE APÓS O FIM DA REQUISIÇÃO
         salvandoProdutoEmAndamento = false;
 
         if (overlay) overlay.classList.add('hidden');
@@ -709,14 +744,21 @@ async function excluirCategoria(id) {
 
 async function carregarDadosSilencioso() {
     try {
-        const [resProd, resCat] = await Promise.all([
+        const [resProd, resCat, resPed] = await Promise.all([
             fetch(`${API_URL}/produtos/`),
-            fetch(`${API_URL}/categorias/`)
+            fetch(`${API_URL}/categorias/`),
+            fetch(`${API_URL}/pedidos/`)
         ]);
 
         if (resProd.ok && resCat.ok) {
             produtos = await resProd.json();
             categorias = await resCat.json();
+            if (resPed.ok) {
+                const todosPedidos = await resPed.json();
+                pedidosPendentes = todosPedidos.filter(p => p.status === 'pendente');
+                vendasConfirmadas = todosPedidos.filter(p => p.status === 'confirmado');
+                vendasEntregues = todosPedidos.filter(p => p.status === 'entregue');
+            }
             renderizarTudo();
         }
     } catch (e) {
