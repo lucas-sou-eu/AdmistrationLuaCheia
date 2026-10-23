@@ -150,26 +150,56 @@ function abrirModalLogin() {
     if (modal) modal.classList.remove('hidden');
 }
 
-function realizarLogin(e) {
+async function realizarLogin(e) {
     if (e) e.preventDefault();
     const u = document.getElementById('loginUsuario').value.trim();
     const s = document.getElementById('loginSenha').value.trim();
 
-    const adminEncontrado = listaAdmins.find(a => a.usuario === u && a.senha === s);
+    try {
+        // Tenta buscar os administradores diretamente do banco de dados Django
+        // Nota: Certifique-se de que a sua API possui uma rota /admins/ ou /usuarios/ 
+        // ou ajuste para a rota de autenticação do seu Django.
+        const response = await fetch(`${API_URL}/admins/`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
 
-    if (adminEncontrado) {
-        adminLogado = adminEncontrado;
-        localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
+        if (!response.ok) {
+            throw new Error("Não foi possível conectar à tabela de administradores do banco.");
+        }
 
-        const modalLogin = document.getElementById('loginModal');
-        if (modalLogin) modalLogin.classList.add('hidden');
+        const listaAdminsBanco = await response.json();
 
-        configurarInterfacePorPerfil();
-        showToast(`Bem-vindo, @${adminLogado.usuario}!`, "success");
-        carregarDadosDoBanco();
-    } else {
-        showToast("Usuário ou senha incorretos!", "error");
+        // Procura no banco se existe o usuário e senha correspondentes
+        const adminEncontrado = listaAdminsBanco.find(a => 
+            (a.usuario === u || a.username === u) && (a.senha === s || a.password === s)
+        );
+
+        if (adminEncontrado) {
+            adminLogado = {
+                id: adminEncontrado.id || "ADM-BD",
+                usuario: adminEncontrado.usuario || adminEncontrado.username,
+                isSuper: adminEncontrado.is_super || adminEncontrado.isSuper || false
+            };
+
+            // Salva apenas a sessão ativa no navegador para manter o usuário logado se houver refresh
+            localStorage.setItem('LUA_CHEIA_ADMIN_LOGADO', JSON.stringify(adminLogado));
+
+            const modalLogin = document.getElementById('loginModal');
+            if (modalLogin) modalLogin.classList.add('hidden');
+
+            configurarInterfacePorPerfil();
+            showToast(`Bem-vindo, @${adminLogado.usuario}!`, "success");
+            carregarDadosDoBanco();
+        } else {
+            showToast("Usuário ou senha incorretos no banco de dados!", "error");
+        }
+
+    } catch (err) {
+        console.error("Erro ao autenticar no banco:", err);
+        showToast("Erro ao validar login no servidor Django. Verifique a API.", "error");
     }
+
     return false;
 }
 
