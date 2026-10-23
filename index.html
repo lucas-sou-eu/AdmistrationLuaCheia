@@ -298,10 +298,20 @@
     </div>
 
     <!-- MODAL PRODUTO -->
+    <!-- MODAL PRODUTO COM OVERLAY DE LOADING -->
     <div id="modalProduto"
         class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div
-            class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto relative">
+
+            <!-- OVERLAY DE BLOQUEIO / LOADING -->
+            <div id="loadingOverlayProduto"
+                class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center gap-3 rounded-2xl hidden">
+                <div class="w-10 h-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>
+                <p class="text-amber-400 font-bold text-sm tracking-wide animate-pulse">A salvar produto no banco...</p>
+                <p class="text-xs text-slate-400">Por favor, aguarde a conclusão.</p>
+            </div>
+
             <h3 id="modalProdutoTitulo" class="font-bold text-slate-100 text-base">Novo Produto</h3>
             <form id="formProduto" onsubmit="salvarProduto(event)" class="space-y-3">
                 <input type="hidden" id="prodId">
@@ -360,11 +370,12 @@
                     </div>
                 </div>
                 <div class="flex justify-end gap-2 pt-3">
-                    <button type="button" onclick="fecharModalProduto()"
+                    <button type="button" id="btnCancelarProduto" onclick="fecharModalProduto()"
                         class="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm">Cancelar</button>
-                    <button type="submit"
-                        class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm">Salvar no
-                        Banco</button>
+                    <button type="submit" id="btnSalvarProduto"
+                        class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-sm flex items-center gap-2">
+                        <span id="btnSalvarProdutoTexto">Salvar no Banco</span>
+                    </button>
                 </div>
             </form>
         </div>
