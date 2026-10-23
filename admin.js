@@ -194,6 +194,7 @@ function renderizarGestaoVendas() {
                     <div>
                         <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">${p.id}</span>
                         <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${p.id}</h4>
+                        <p class="text-xs font-semibold text-amber-400 mt-0.5"><i class="fa-solid fa-user text-[10px] mr-1"></i>${p.cliente || 'Cliente não identificado'}</p>
                         <p class="text-xs text-slate-400">${p.dataHora || ''}</p>
                     </div>
                     <span class="font-bold text-amber-400 text-sm">R$ ${parseFloat(p.total).toFixed(2).replace('.', ',')}</span>
@@ -215,6 +216,7 @@ function renderizarGestaoVendas() {
                     <div>
                         <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">CONFIRMADO</span>
                         <h4 class="font-bold text-slate-100 text-sm mt-1">Pedido #${v.id}</h4>
+                        <p class="text-xs font-semibold text-emerald-400 mt-0.5"><i class="fa-solid fa-user text-[10px] mr-1"></i>${v.cliente || 'Cliente não identificado'}</p>
                         <p class="text-xs text-slate-400">${v.dataHora || ''}</p>
                     </div>
                     <span class="font-bold text-amber-400 text-sm">R$ ${parseFloat(v.total).toFixed(2).replace('.', ',')}</span>
@@ -235,6 +237,7 @@ function renderizarGestaoVendas() {
                     <div>
                         <span class="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">ENTREGUE</span>
                         <h4 class="font-bold text-slate-300 text-sm mt-1">Pedido #${e.id}</h4>
+                        <p class="text-xs font-semibold text-slate-400 mt-0.5"><i class="fa-solid fa-user text-[10px] mr-1"></i>${e.cliente || 'Cliente não identificado'}</p>
                         <p class="text-xs text-slate-500">${e.dataHora || ''}</p>
                     </div>
                     <span class="font-semibold text-slate-300 text-sm">R$ ${parseFloat(e.total).toFixed(2).replace('.', ',')}</span>
@@ -340,7 +343,14 @@ function abrirDetalhesVenda(tipo, id) {
     if (totalEl) totalEl.textContent = `R$ ${parseFloat(p.total).toFixed(2).replace('.', ',')}`;
 
     if (conteudo) {
-        conteudo.innerHTML = p.itens.map(i => `
+        let htmlCliente = `
+            <div class="p-3 bg-slate-800/60 border border-slate-700/60 rounded-xl mb-3">
+                <span class="text-[11px] text-slate-400 uppercase font-semibold block">Cliente</span>
+                <span class="text-sm font-bold text-amber-400"><i class="fa-solid fa-user mr-1.5"></i>${p.cliente || 'Cliente não identificado'}</span>
+            </div>
+        `;
+
+        let htmlItens = p.itens.map(i => `
             <div class="flex justify-between items-center py-2 border-b border-slate-800">
                 <div>
                     <p class="font-bold text-slate-200">${i.nome}</p>
@@ -349,6 +359,8 @@ function abrirDetalhesVenda(tipo, id) {
                 <span class="font-semibold text-amber-400">R$ ${(i.preco * i.quantidade).toFixed(2).replace('.', ',')}</span>
             </div>
         `).join('');
+
+        conteudo.innerHTML = htmlCliente + htmlItens;
     }
 
     if (modal) modal.classList.remove('hidden');
